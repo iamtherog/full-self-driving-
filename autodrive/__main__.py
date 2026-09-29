@@ -2,11 +2,12 @@
 
     python -m autodrive                      # all scenarios
     python -m autodrive city highway --plots out/
+    python -m autodrive --attention          # also run the attention monitor (advisory only)
 """
 
 import argparse
-import os
 import sys
+from pathlib import Path
 
 from . import scenarios
 from .sim import run
@@ -18,22 +19,39 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("names", nargs="*", metavar="scenario",
                         help=f"any of: {', '.join(scenarios.ALL)} (default: all)")
     parser.add_argument("--plots", metavar="DIR", help="write a PNG report per scenario")
+    parser.add_argument("--attention", action="store_true",
+                        help="run the attention monitor and list its advisories")
     args = parser.parse_args(argv)
     unknown = [n for n in args.names if n not in scenarios.ALL]
     if unknown:
         parser.error(f"unknown scenario(s): {', '.join(unknown)}")
 
+    model = None
+    if args.attention:
+        from .attention import AttentionModel
+        model = AttentionModel.load()
+
     failed = 0
     for name in args.names or list(scenarios.ALL):
         scenario = scenarios.ALL[name]()
-        result = run(scenario)
+        monitor = None
+        if model is not None:
+            from .attention import AttentionMonitor
+            monitor = AttentionMonitor(model)
+        result = run(scenario, observer=monitor)
         print(f"\n{scenario.name} - {scenario.description}")
         print(result.summary())
+        if monitor is not None:
+            for flag in monitor.flags:
+                status = "shown" if flag.delivered else f"withheld ({flag.withheld_because})"
+                print(f"  {flag.t:6.2f} s  {flag.message:<62} {status}")
+            if not monitor.flags:
+                print("  Attention monitor      no flags")
         failed += not result.passed
         if args.plots:
             from .plot import save_report
-            os.makedirs(args.plots, exist_ok=True)
-            path = os.path.join(args.plots, f"{name}.png")
+            Path(args.plots).mkdir(parents=True, exist_ok=True)
+            path = str(Path(args.plots) / f"{name}.png")
             save_report(scenario, result, path)
             print(f"  Report                 {path}")
     return 1 if failed else 0

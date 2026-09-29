@@ -4,11 +4,19 @@ controllers -> safety supervisor -> vehicle, at realistic rates."""
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 from .config import Config
 from .control import LateralController, LongitudinalController
-from .perception import (LaneEstimate, LeadEstimate, PerceptionFrame, SensorSuite,
-                         dead_reckon, time_to_collision)
+from .observe import Advisory, Observer, Snapshot
+from .perception import (
+    LaneEstimate,
+    LeadEstimate,
+    PerceptionFrame,
+    SensorSuite,
+    dead_reckon,
+    time_to_collision,
+)
 from .planner import Planner
 from .route import Route
 from .safety import Mode, SafetyOutput, SafetySupervisor
@@ -17,7 +25,7 @@ from .world import LeadVehicle
 
 HUMAN_BRAKE_DECEL = 3.0   # m/s^2, how hard the simulated driver brakes
 LOG_FIELDS = ("t", "x", "y", "s", "speed", "accel", "steer", "lateral", "mode", "behavior",
-              "speed_cap", "gap", "lead_speed", "ttc", "aeb", "alert")
+              "speed_cap", "gap", "lead_speed", "ttc", "aeb", "alert", "advisory")
 
 
 @dataclass
@@ -37,7 +45,7 @@ class Scenario:
 @dataclass
 class Result:
     scenario: str
-    log: dict[str, list]
+    log: dict[str, list[Any]]
     collision: bool
     red_light_violations: int
     min_gap: float
@@ -47,6 +55,8 @@ class Result:
     aeb_activations: int
     distance: float
     final_mode: str
+    advisories: tuple[Advisory, ...] = ()
+    observer_error: str | None = None    # set if an observer raised and was detached
 
     @property
     def passed(self) -> bool:
@@ -69,7 +79,16 @@ class Result:
         return "\n".join(f"  {k:<{width}}  {v}" for k, v in rows)
 
 
-def run(scenario: Scenario, config: Config | None = None) -> Result:
+def run(scenario: Scenario, config: Config | None = None,
+        observer: Observer | None = None) -> Result:
+    """Drive a scenario closed-loop.
+
+    ``observer``, if given, sees a read-only :class:`Snapshot` after every
+    control step. Its advisories are recorded and nothing else: they never reach
+    the planner, the controllers or the safety supervisor. An observer that
+    raises is detached and the drive continues unchanged, because a failure in
+    an advisory layer must not become a failure of the vehicle.
+    """
     cfg = config or Config()
     dt = 1.0 / cfg.control_rate_hz
     sense_every = round(cfg.control_rate_hz / cfg.sensors.rate_hz)
@@ -84,12 +103,14 @@ def run(scenario: Scenario, config: Config | None = None) -> Result:
     safety = SafetySupervisor(cfg.safety, cfg.vehicle)
     human = LateralController(cfg.controller, cfg.vehicle)  # stand-in for a human steering
     metrics = _Metrics(route)
-    log: dict[str, list] = {k: [] for k in LOG_FIELDS}
+    log: dict[str, list[Any]] = {k: [] for k in LOG_FIELDS}
 
     frame: PerceptionFrame | None = None
     lane: LaneEstimate | None = None
     plan = None
     hint = None
+    advisories: list[Advisory] = []
+    observer_error: str | None = None
 
     for k in range(int(scenario.duration / dt)):
         t = k * dt
@@ -126,6 +147,24 @@ def run(scenario: Scenario, config: Config | None = None) -> Result:
         if out.aeb_active or (out.mode != was_mode and out.mode in (Mode.ENGAGED, Mode.OFF)):
             lon.reset(ego.accel)  # resume smoothly from wherever the car actually is
 
+        advisory = None
+        if observer is not None:
+            fresh = frame is not None and t - frame.t <= cfg.safety.sensor_timeout
+            snapshot = Snapshot(
+                t=t, mode=out.mode.value, aeb=out.aeb_active, alert=out.alert,
+                behavior=plan.behavior if plan else "", speed=ego.speed, accel=ego.accel,
+                lane_lateral=lane.lateral if lane is not None else None,
+                ttc=time_to_collision(frame.lead) if fresh and frame is not None else math.inf,
+                perception_age=t - frame.t if frame is not None else math.inf,
+            )
+            try:
+                advisory = observer.observe(snapshot)
+            except Exception as exc:
+                observer_error = f"{type(exc).__name__}: {exc}"
+                observer = None
+            if advisory is not None:
+                advisories.append(advisory)
+
         # The human fills in whatever the system doesn't control.
         truth_lane = LaneEstimate(truth.s, truth.lateral, truth.heading_error, truth.curvature)
         steer = (out.command.steer if out.controls_lateral
@@ -147,6 +186,7 @@ def run(scenario: Scenario, config: Config | None = None) -> Result:
             ("speed_cap", plan.speed_cap if plan else math.nan), ("gap", gap),
             ("lead_speed", lead.speed if lead is not None and lead.present else math.nan),
             ("ttc", ttc), ("aeb", out.aeb_active), ("alert", out.alert),
+            ("advisory", advisory.message if advisory is not None else None),
         ):
             log[key].append(value)
 
@@ -157,7 +197,7 @@ def run(scenario: Scenario, config: Config | None = None) -> Result:
     m = metrics
     return Result(scenario.name, log, m.collision, m.red_light_violations, m.min_gap,
                   m.min_ttc, m.max_lateral_error, m.max_jerk, m.aeb_activations,
-                  float(log["s"][-1]), safety.mode.value)
+                  float(log["s"][-1]), safety.mode.value, tuple(advisories), observer_error)
 
 
 class _Metrics:

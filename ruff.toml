@@ -1,0 +1,13 @@
+line-length = 110
+target-version = "py310"
+
+[lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "RET", "PTH", "RUF"]
+ignore = [
+    "E741",                        # `l` as a loop name in route.py
+    "N806",                        # maths notation: L (wheelbase), F, Q, K (Kalman filter)
+    "RUF001", "RUF002", "RUF003",  # ² and × in strings and docstrings are intended
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["N802"]

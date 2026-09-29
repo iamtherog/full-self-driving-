@@ -53,7 +53,7 @@ class Route:
     lights: list[TrafficLight] = field(default_factory=list)
     ds: float = 0.5
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         first = self.segments[0]
         xs, ys, yaws, ss = [0.0], [0.0], [0.0], [0.0]
         ks, limits = [first.curvature], [first.speed_limit]

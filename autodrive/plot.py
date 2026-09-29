@@ -1,14 +1,16 @@
 """Drive report: one figure per scenario showing what the system saw and did."""
 
 import math
+from typing import Any
 
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.axes import Axes
 
-from .sim import Result, Scenario  # noqa: E402
+from .sim import Result, Scenario
 
 MODE_COLORS = {"engaged": "#2e7d32", "lat_override": "#f9a825", "fault": "#c62828", "off": "#9e9e9e"}
 
@@ -76,7 +78,7 @@ def save_report(scenario: Scenario, result: Result, path: str) -> None:
     plt.close(fig)
 
 
-def _shade(ax, t, log) -> None:
+def _shade(ax: Axes, t: np.ndarray, log: dict[str, list[Any]]) -> None:
     """Red bands where emergency braking fired."""
     aeb = np.array(log["aeb"])
     if aeb.any():

@@ -47,7 +47,7 @@ class SafetySupervisor:
 
         # --- Automatic emergency braking: always on, even when disengaged.
         fresh = frame is not None and t - frame.t <= lim.sensor_timeout
-        ttc = time_to_collision(frame.lead) if fresh else math.inf
+        ttc = time_to_collision(frame.lead) if fresh and frame is not None else math.inf
         aeb = ttc < lim.aeb_ttc and ego.speed > 0.5
 
         accel, steer = requested.accel, requested.steer

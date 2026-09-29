@@ -29,7 +29,7 @@ class LeadVehicle:
     _target: float = field(init=False, default=0.0)
     _rate: float = field(init=False, default=0.0)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self._target, self._rate = self.speed, 0.0
         self.plan = sorted(self.plan, key=lambda c: c.t)
 

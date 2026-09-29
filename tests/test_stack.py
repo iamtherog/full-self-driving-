@@ -4,7 +4,7 @@ import pytest
 
 from autodrive import Config, scenarios
 from autodrive.control import LateralController, LongitudinalController
-from autodrive.perception import LaneEstimate, LeadEstimate, PerceptionFrame, LightEstimate, dead_reckon
+from autodrive.perception import LaneEstimate, LeadEstimate, LightEstimate, PerceptionFrame, dead_reckon
 from autodrive.planner import Planner
 from autodrive.route import Route, Segment, TrafficLight
 from autodrive.safety import Mode, SafetySupervisor
@@ -139,9 +139,11 @@ def test_supervisor_rate_limits_accel_steps():
 
 def test_brake_pedal_cancels_and_steering_overrides():
     sup = engaged_supervisor()
-    out = sup.update(0.01, frame(0.01), DriverInput(steering_torque=3.0), VehicleCommand(), VehicleState(), 0.01)
+    steer = DriverInput(steering_torque=3.0)
+    out = sup.update(0.01, frame(0.01), steer, VehicleCommand(), VehicleState(), 0.01)
     assert out.mode == Mode.LAT_OVERRIDE and not out.controls_lateral and out.controls_longitudinal
-    out = sup.update(0.02, frame(0.02), DriverInput(brake_pressed=True), VehicleCommand(), VehicleState(), 0.01)
+    brake = DriverInput(brake_pressed=True)
+    out = sup.update(0.02, frame(0.02), brake, VehicleCommand(), VehicleState(), 0.01)
     assert out.mode == Mode.OFF and not out.controls_longitudinal
 
 
