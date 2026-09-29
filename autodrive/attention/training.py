@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 
 from . import corpus as corpus_module
@@ -35,7 +35,7 @@ from .sprt import SPRT
 
 @dataclass(frozen=True)
 class Plan:
-    drives: int = 600
+    drives: int = 1500
     first_seed: int = 0
     orders: tuple[int, ...] = (1, 2, 3, 4, 5)
     fractions: tuple[float, float, float] = (0.6, 0.2, 0.2)   # train, calibration, test
@@ -57,6 +57,35 @@ def surprisals(lm: KneserNey, tokens: Sequence[str]) -> list[float]:
 
     width = lm.order - 1
     return [lm.surprisal(tokens[max(0, i - width):i], token) for i, token in enumerate(tokens)]
+
+
+def poisson_interval(k: int, confidence: float = 0.95) -> tuple[float, float]:
+    """Exact (Garwood) confidence interval for the mean of a Poisson count ``k``.
+
+    Found by bisection on the Poisson CDF, so it needs nothing beyond the
+    standard library: the lower limit is the mean at which P(X >= k) = alpha/2,
+    the upper the mean at which P(X <= k) = alpha/2.
+    """
+
+    alpha = 1.0 - confidence
+
+    def cdf(x: int, mu: float) -> float:              # P(X <= x)
+        term = total = math.exp(-mu)
+        for i in range(1, x + 1):
+            term *= mu / i
+            total += term
+        return total
+
+    def solve(f: Callable[[float], float], lo: float, hi: float) -> float:
+        for _ in range(200):                          # f is monotone increasing on [lo, hi]
+            mid = (lo + hi) / 2
+            lo, hi = (mid, hi) if f(mid) < 0 else (lo, mid)
+        return (lo + hi) / 2
+
+    hi_bound = k + 20.0 + 10.0 * math.sqrt(k + 1)
+    lower = 0.0 if k == 0 else solve(lambda mu: (1 - cdf(k - 1, mu)) - alpha / 2, 0.0, hi_bound)
+    upper = solve(lambda mu: alpha / 2 - cdf(k, mu), 0.0, hi_bound)
+    return lower, upper
 
 
 def perplexity(lm: KneserNey, drives: Sequence[Sequence[str]]) -> float:
@@ -88,11 +117,14 @@ def _split(items: Sequence[corpus_module.Drive], fractions: tuple[float, float, 
     return list(items[:a]), list(items[a:b]), list(items[b:])
 
 
-def train(plan: Plan | None = None, spec: TokenSpec | None = None) -> AttentionModel:
+def train(plan: Plan | None = None, spec: TokenSpec | None = None, *,
+          workers: int | None = None) -> AttentionModel:
+    """Run the pipeline in the module docstring. ``workers`` only changes speed, never the result."""
+
     plan = plan or Plan()
     spec = spec or TokenSpec()
     seeds = range(plan.first_seed, plan.first_seed + plan.drives)
-    data = corpus_module.build(seeds, spec)
+    data = corpus_module.build(seeds, spec, workers=workers)
     train_set, calibration, test = _split(data.drives, plan.fractions)
     if not (train_set and calibration and test):
         raise ValueError(f"too few nominal drives ({len(data.drives)}) to fill three splits")
@@ -135,6 +167,7 @@ def train(plan: Plan | None = None, spec: TokenSpec | None = None) -> AttentionM
         "test_hours": round(hours, 4),
         "test_flags": test_flags,
         "test_flags_per_hour": round(test_flags / hours, 3),
+        "test_flags_per_hour_95ci": [round(x / hours, 3) for x in poisson_interval(test_flags)],
         "test_drives_with_a_flag": sum(any(flagged(d)) for d in test),
         "test_novel_events": sum(t not in lm.vocabulary for d in test for t in d.tokens),
     }

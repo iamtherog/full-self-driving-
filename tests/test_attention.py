@@ -17,7 +17,7 @@ from autodrive.attention.kneser_ney import BOS, EOS, UNK, estimate_discounts
 from autodrive.attention.model import ArtifactError
 from autodrive.attention.monitor import PREFIX, SEVERITY, TEMPLATES
 from autodrive.attention.sprt import SPRT
-from autodrive.attention.training import Plan, surprisals, threshold_at, train
+from autodrive.attention.training import Plan, poisson_interval, surprisals, threshold_at, train
 from autodrive.observe import Snapshot
 from autodrive.sim import run
 
@@ -180,6 +180,16 @@ def test_threshold_respects_the_flag_budget_even_with_ties():
     assert threshold_at(values, 0.999) > 9.0                    # budget of 1 cannot be met by a tie of 10
 
 
+def test_poisson_interval_is_the_exact_garwood_interval():
+    # Reference values from the chi-square identity lower = chi2(a/2, 2k) / 2,
+    # upper = chi2(1 - a/2, 2k + 2) / 2, computed with scipy.stats.chi2.
+    expected = {0: (0.0, 3.688879), 1: (0.025318, 5.571643), 9: (4.115373, 17.084803),
+                30: (20.240874, 42.826865)}
+    for k, (lo, hi) in expected.items():
+        got = poisson_interval(k)
+        assert got[0] == pytest.approx(lo, abs=1e-6) and got[1] == pytest.approx(hi, abs=1e-6)
+
+
 def test_plan_rejects_invalid_settings():
     with pytest.raises(ValueError):
         Plan(fractions=(0.5, 0.5, 0.0))
@@ -280,6 +290,19 @@ def test_training_is_deterministic_for_any_worker_count():
     parallel = corpus_module.build(range(8), TokenSpec(), workers=3)
     assert serial.drives == parallel.drives
     assert train(Plan(drives=15)).digest() == train(Plan(drives=15)).digest()
+
+
+def test_training_and_monitoring_work_with_networking_disabled(monkeypatch):
+    import socket
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("the attention monitor attempted network access")
+
+    monkeypatch.setattr(socket, "socket", refuse)
+    monkeypatch.setattr(socket, "create_connection", refuse)
+    model = train(Plan(drives=15), workers=1)
+    result = run(scenarios.hard_brake(), observer=AttentionMonitor(model))
+    assert result.observer_error is None
 
 
 @pytest.mark.slow

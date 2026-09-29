@@ -29,6 +29,16 @@ from ..world import LeadVehicle, SpeedChange
 from .events import TokenSpec, events
 
 MPH = 0.44704
+#: ITE yellow change interval, y = t + v / (2a) on level grade, with perception-
+#: reaction time t = 1.0 s and deceleration a = 3.05 m/s^2 (10 ft/s^2). Signals
+#: are timed this way so that a driver at the limit is never caught unable either
+#: to stop or to clear. Random yellows shorter than this create a dilemma zone no
+#: driver, human or software, can resolve.
+ITE_REACTION, ITE_DECEL, MIN_YELLOW = 1.0, 3.05, 3.0
+
+
+def ite_yellow(limit: float) -> float:
+    return max(MIN_YELLOW, ITE_REACTION + limit / (2.0 * ITE_DECEL))
 MAX_DURATION = 45.0    # s per drive; bounds corpus cost without cutting routes short often
 SEED_DOMAIN = 0x5EED_A77E  # separates corpus seeds from any other use of the same integers
 
@@ -87,7 +97,8 @@ def _urban(seed: int, rng: np.random.Generator) -> Scenario:
         segments.append(Segment(length, 0.0, limit))
         if rng.random() < 0.4:
             lights.append(TrafficLight(s=s + float(rng.uniform(60, length - 20)),
-                                       green=float(rng.uniform(10, 20)), yellow=float(rng.uniform(3, 4)),
+                                       green=float(rng.uniform(10, 20)),
+                                       yellow=ite_yellow(limit) + float(rng.uniform(0, 0.5)),
                                        red=float(rng.uniform(10, 20)), offset=float(rng.uniform(0, 40))))
         s += length
     lead = None
