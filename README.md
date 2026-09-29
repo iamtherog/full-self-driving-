@@ -5,6 +5,15 @@ cruise, traffic-light handling, emergency braking, driver override and fault
 handling) that drives a **simulated** 2026 Toyota Corolla sedan. The stack is
 exercised by six closed-loop scenarios and 34 automated tests.
 
+> ⚠️ **Fully speculative. Do not use on a car.** This project is a thought
+> experiment and a software demonstration. Nothing in it has been
+> inspected, validated or certified for a real vehicle. It must not be put
+> on a car unless it has first been inspected by an investigator. That
+> includes review by an AI investigator (an AI system that audits the code
+> and its test evidence), and also full review by qualified human safety
+> engineers and the testing and certification that road vehicles legally
+> require. An AI inspection alone does not make this code safe to drive.
+
 > **This does not connect to a real car, on purpose.** The vehicle is a
 > physics model. Controlling a real vehicle needs certified hardware, a
 > safety processor that enforces limits independently of the main computer,
