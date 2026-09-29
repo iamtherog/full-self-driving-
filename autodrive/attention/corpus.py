@@ -106,6 +106,10 @@ def _urban(seed: int, rng: np.random.Generator) -> Scenario:
         lead = LeadVehicle(s=float(rng.uniform(25, 45)), speed=float(rng.uniform(6, 11)),
                            leave_at=float(rng.uniform(5, 20)))
     initial = 0.0 if rng.random() < 0.5 else limit * float(rng.uniform(0.5, 1.0))
+    if lead is not None:
+        # The lead starts only 25-45 m ahead. Starting faster than it would put
+        # the drive a couple of seconds from collision at t = 0: not nominal.
+        initial = min(initial, lead.speed)
     return Scenario(f"nominal-{seed}", "urban", Route(segments, lights),
                     duration=MAX_DURATION, initial_speed=initial, lead=lead, seed=seed)
 
