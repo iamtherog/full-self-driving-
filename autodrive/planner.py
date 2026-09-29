@@ -25,7 +25,8 @@ class Plan:
 class Planner:
     def __init__(self, route: Route, params: PlannerParams):
         self.route, self.p = route, params
-        self._committed_light_s: float | None = None
+        self._committed_light_s: float | None = None   # decided to go through this light
+        self._stopping_light_s: float | None = None    # decided to stop for this light
 
     def plan(self, frame: PerceptionFrame, speed: float) -> Plan:
         p, lane = self.p, frame.lane
@@ -66,19 +67,45 @@ class Planner:
         return float(reachable[i]), reason
 
     def _light_accel(self, frame: PerceptionFrame, speed: float, cap: float) -> float | None:
+        """Stop for a yellow or red light, or commit to going through it.
+
+        The decision is the classic dilemma-zone test: stop if the deceleration
+        needed to halt before the line is within the limit for the light's color,
+        otherwise go. Three details make it hold up in closed loop:
+
+        * A fresh decision allows for brake build-up. Braking reaches the
+          commanded level only after ``brake_buildup`` seconds, so the distance
+          covered meanwhile is not available for stopping. Once a stop is under
+          way the brakes are already applied, and the allowance no longer applies.
+        * Both decisions are latched per light. Re-deciding every tick lets a car
+          that has begun to stop drift just past the yellow limit and flip to
+          "go" when it is too close to clear the intersection. Once stopping, only
+          the harder red-light limit can reverse the decision.
+        * A commitment to go lapses if the car slows to ``commit_min_speed``
+          before the line (for example braking for a turn). A car that slow can
+          always stop, and must not creep across on red.
+        """
+
         light, p = frame.light, self.p
         if light is None or light.state == "green":
             return None
         light_s = frame.lane.s + light.distance
-        if self._committed_light_s is not None and abs(self._committed_light_s - light_s) < 1.0:
-            return None  # already decided to go through this one
+        same = lambda latched: latched is not None and abs(latched - light_s) < 1.0  # noqa: E731
+
+        if same(self._committed_light_s):
+            if speed > p.commit_min_speed:
+                return None                       # already decided to go through this one
+            self._committed_light_s = None        # slowed right down: stop after all
+
+        stopping = same(self._stopping_light_s)
         d_stop = light.distance - p.stop_line_margin
-        required = speed ** 2 / (2.0 * max(d_stop, 0.1))
-        # Dilemma zone: if we can't stop comfortably, commit to going through.
-        limit = p.yellow_max_decel if light.state == "yellow" else p.red_max_decel
-        if required > limit and speed > 3.0:
-            self._committed_light_s = light_s
+        d_brake = d_stop if stopping else d_stop - speed * p.brake_buildup
+        required = speed ** 2 / (2.0 * d_brake) if d_brake > 0.0 else math.inf
+        limit = p.red_max_decel if stopping or light.state == "red" else p.yellow_max_decel
+        if required > limit and speed > p.commit_min_speed:
+            self._committed_light_s, self._stopping_light_s = light_s, None
             return None
+        self._stopping_light_s = light_s
         return self._idm(speed, cap, max(d_stop, 0.05), 0.0, 0.5, 1.0)
 
     def _idm(self, v: float, v0: float, gap: float, lead_speed: float,
@@ -87,6 +114,7 @@ class Planner:
         p = self.p
         v0 = max(v0, 0.1)
         dv = v - lead_speed
-        s_star = s0 + max(0.0, v * headway + v * dv / (2.0 * math.sqrt(p.idm_max_accel * p.idm_comfort_decel)))
+        braking_term = v * dv / (2.0 * math.sqrt(p.idm_max_accel * p.idm_comfort_decel))
+        s_star = s0 + max(0.0, v * headway + braking_term)
         gap = max(gap, 0.1)
         return p.idm_max_accel * (1.0 - (v / v0) ** 4 - (s_star / gap) ** 2)

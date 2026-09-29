@@ -37,6 +37,11 @@ class PlannerParams:
     yellow_max_decel: float = 3.0      # m/s^2, stop for yellow only if this suffices
     red_max_decel: float = 4.5         # m/s^2, beyond this we're already committed
     stop_line_margin: float = 1.5      # m, stop this far before the line
+    # Time before commanded braking is fully established: powertrain lag (0.3 s)
+    # plus the jerk-limited ramp to the yellow decel (3.0 / (2 * 5.0) = 0.3 s).
+    # The stop/go decision must allow for the distance covered meanwhile.
+    brake_buildup: float = 0.6         # s
+    commit_min_speed: float = 3.0      # m/s, below this the car can always stop; no commitment to go
 
 
 @dataclass(frozen=True)

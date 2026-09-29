@@ -95,6 +95,38 @@ def test_planner_stops_for_red_but_commits_to_close_yellow():
     assert close_yellow.behavior != "stop_for_light"
 
 
+def test_a_decision_to_stop_at_yellow_is_not_reversed_by_lag():
+    # Light 40 m ahead turns yellow at 13.3 m/s: stoppable within 3 m/s^2 once
+    # brake build-up is allowed for, so the planner stops. 10 m later the car is
+    # a little behind the ideal curve (3.9 m/s^2 now needed). Re-deciding at the
+    # yellow limit would flip to "go" too late to clear; the latch keeps stopping.
+    planner = Planner(Route([Segment(500, 0.0, 15.0)]), CFG.planner)
+    first = planner.plan(frame(s=0.0, light=LightEstimate(40.0, "yellow")), 13.3)
+    assert first.behavior == "stop_for_light"
+    later = planner.plan(frame(s=10.0, light=LightEstimate(30.0, "yellow")), 12.8)
+    assert later.behavior == "stop_for_light"
+
+
+def test_a_commitment_to_go_lapses_if_the_car_slows_before_the_line():
+    planner = Planner(Route([Segment(500, 0.0, 15.0)]), CFG.planner)
+    assert planner.plan(frame(s=0.0, light=LightEstimate(10.0, "yellow")), 13.0).behavior != "stop_for_light"
+    stopped_short = planner.plan(frame(s=5.0, light=LightEstimate(5.0, "red")), 2.0)
+    assert stopped_short.behavior == "stop_for_light"
+
+
+def test_brake_buildup_matches_the_actuator_it_models():
+    p, v, c = CFG.planner, CFG.vehicle, CFG.controller
+    assert p.brake_buildup == pytest.approx(v.accel_lag + p.yellow_max_decel / (2 * c.max_jerk))
+
+
+@pytest.mark.parametrize("seed", [165, 386, 406, 507])
+def test_randomized_urban_drives_that_once_ran_red_lights_now_stop(seed):
+    # Found by the attention monitor's nominal-corpus filter; see planner._light_accel.
+    from autodrive.attention.corpus import nominal_scenario
+    result = run(nominal_scenario(seed))
+    assert result.red_light_violations == 0 and result.passed
+
+
 # --- Controllers -----------------------------------------------------------
 
 def test_lateral_controller_steers_back_toward_center():
