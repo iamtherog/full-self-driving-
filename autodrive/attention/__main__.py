@@ -19,15 +19,17 @@ from .training import Plan, train
 
 
 def _print_rows(rows: list[Row]) -> None:
-    print(f"{'scenario':<16} {'incident':>9} {'first warning':>14} {'lead':>6}  "
-          f"{'flags':>5} {'shown':>5}  first message shown")
+    def sec(v: float | None) -> str:
+        return f"{v:.2f}" if v is not None else "-"
+
+    print(f"{'scenario':<16} {'incident':>8} {'flag lead':>9} {'shown lead':>10} {'flags':>5} {'shown':>5}  "
+          "advisories shown")
     for row in rows:
-        incident = f"{row.incident_at:.2f} s" if row.incident_at is not None else "none"
-        warning = f"{row.first_warning_at:.2f} s" if row.first_warning_at is not None else "-"
-        lead = f"{row.lead_time:.2f}" if row.lead_time is not None else "-"
-        shown = row.delivered[0].message if row.delivered else "-"
-        print(f"{row.scenario:<16} {incident:>9} {warning:>14} {lead:>6}  "
-              f"{len(row.flags):>5} {len(row.delivered):>5}  {shown}")
+        shown = "; ".join(f"{f.t:.1f} s {f.message}" for f in row.delivered) or "-"
+        print(f"{row.scenario:<16} {sec(row.incident_at):>8} {sec(row.lead_time):>9} "
+              f"{sec(row.shown_lead_time):>10} {len(row.flags):>5} {len(row.delivered):>5}  {shown}")
+    print("lead = seconds from the first flag (or first advisory shown) to the incident; "
+          "flags include those kept for review")
 
 
 def cmd_train(args: argparse.Namespace) -> int:

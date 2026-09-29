@@ -15,7 +15,7 @@ from autodrive.attention.evaluate import score
 from autodrive.attention.events import MODE_SEVERITY, events
 from autodrive.attention.kneser_ney import BOS, EOS, UNK, estimate_discounts
 from autodrive.attention.model import ArtifactError
-from autodrive.attention.monitor import PREFIX, SEVERITY, TEMPLATES
+from autodrive.attention.monitor import DELIVERABLE, PREFIX, SEVERITY, TEMPLATES
 from autodrive.attention.sprt import SPRT
 from autodrive.attention.training import Plan, poisson_interval, surprisals, threshold_at, train
 from autodrive.observe import Snapshot
@@ -241,21 +241,24 @@ def test_every_message_comes_from_a_fixed_template(shipped):
             assert any(re.fullmatch(p, flag.message) for p in patterns), flag.message
 
 
-def test_nothing_is_shown_over_a_safety_alert_or_while_the_driver_drives(shipped):
+def test_nothing_is_shown_during_or_just_after_a_safety_alert_or_while_the_driver_drives(shipped):
     for name in scenarios.ALL:
         row = score(name, shipped)
         log = row.result.log
         for flag in row.delivered:
             i = round(flag.t / 0.01)
-            assert log["alert"][i] is None and log["mode"][i] == "engaged", (name, flag)
+            recent = range(max(0, i - round(shipped.holdoff / 0.01)), i + 1)
+            assert all(log["alert"][j] is None for j in recent), (name, flag)
+            assert log["mode"][i] == "engaged", (name, flag)
+            assert flag.reason in DELIVERABLE
 
 
 def test_hold_off_limits_repeats_but_never_blocks_an_escalation(shipped):
     eager = AttentionModel(lm=shipped.lm, spec=shipped.spec, threshold_bits=-math.inf, holdoff=3.0)
     monitor = AttentionMonitor(eager)
     shown = []
-    for k in range(150):                        # benign windows end at 0.5 s and 1.0 s; both flagged
-        advisory = monitor.observe(snap(k * 0.01))
+    for k in range(150):                        # 0.5 m off center; windows end at 0.5 s and 1.0 s
+        advisory = monitor.observe(snap(k * 0.01, lateral=0.5))
         if advisory:
             shown.append(advisory)
     assert [a.t for a in shown] == [0.5]
@@ -266,7 +269,15 @@ def test_hold_off_limits_repeats_but_never_blocks_an_escalation(shipped):
             shown.append(advisory)
     assert len(shown) == 2 and "closing on the vehicle ahead" in shown[1].message
     assert shown[1].t == pytest.approx(2.0)
-    assert SEVERITY["closing"] > SEVERITY["unusual"]
+    assert SEVERITY["closing"] > SEVERITY["lane"]
+
+
+def test_statistically_unusual_but_benign_moments_go_to_review_not_the_driver(shipped):
+    eager = AttentionModel(lm=shipped.lm, spec=shipped.spec, threshold_bits=-math.inf, holdoff=3.0)
+    monitor = AttentionMonitor(eager)
+    advisories = [monitor.observe(snap(k * 0.01)) for k in range(300)]
+    assert not any(advisories)
+    assert monitor.flags and all(f.reason == "unusual" and not f.delivered for f in monitor.flags)
 
 
 # --- The artifact ---------------------------------------------------------------

@@ -90,7 +90,10 @@ class Planner:
         if light is None or light.state == "green":
             return None
         light_s = frame.lane.s + light.distance
-        same = lambda latched: latched is not None and abs(latched - light_s) < 1.0  # noqa: E731
+
+        def same(latched: float | None) -> bool:
+            return latched is not None and abs(latched - light_s) < 1.0
+
 
         if same(self._committed_light_s):
             if speed > p.commit_min_speed:

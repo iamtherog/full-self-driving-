@@ -5,8 +5,9 @@ nominal drives only), so this is an out-of-sample check of two claims:
 
 * On ordinary driving (``highway``, ``city``) the monitor should stay quiet.
 * Before an incident, which here means the first step of emergency braking or a
-  system fault, it should flag the build-up. The lead time is measured from the
-  first flag in the five seconds before the incident to the incident itself.
+  system fault, it should flag the build-up. Lead time is measured from the
+  first flag in the five seconds before the incident (and separately from the
+  first advisory actually shown to the driver) to the incident itself.
 
 Everything here is recomputed from a fresh run; nothing is read from the artifact's
 stored metrics.
@@ -33,13 +34,20 @@ class Row:
     flags: tuple[Flag, ...]
     scores: tuple[tuple[Event, float], ...]   # every event and its surprisal, in order
     incident_at: float | None
-    first_warning_at: float | None     # first flag within LOOKBACK before the incident
+    first_warning_at: float | None     # first flag (shown or kept for review) within LOOKBACK before it
+    first_shown_at: float | None       # first advisory shown to the driver within LOOKBACK before it
 
     @property
     def lead_time(self) -> float | None:
         if self.incident_at is None or self.first_warning_at is None:
             return None
         return self.incident_at - self.first_warning_at
+
+    @property
+    def shown_lead_time(self) -> float | None:
+        if self.incident_at is None or self.first_shown_at is None:
+            return None
+        return self.incident_at - self.first_shown_at
 
     @property
     def delivered(self) -> tuple[Flag, ...]:
@@ -57,10 +65,12 @@ def score(name: str, model: AttentionModel) -> Row:
     monitor = AttentionMonitor(model)
     result = run(scenarios.ALL[name](), observer=monitor)
     onset = incident_onset(result)
-    warning = None
+    warning = shown = None
     if onset is not None:
-        warning = next((f.t for f in monitor.flags if onset - LOOKBACK <= f.t <= onset), None)
-    return Row(name, result, tuple(monitor.flags), tuple(monitor.scores), onset, warning)
+        before = [f for f in monitor.flags if onset - LOOKBACK <= f.t <= onset]
+        warning = before[0].t if before else None
+        shown = next((f.t for f in before if f.delivered), None)
+    return Row(name, result, tuple(monitor.flags), tuple(monitor.scores), onset, warning, shown)
 
 
 def score_all(model: AttentionModel) -> list[Row]:

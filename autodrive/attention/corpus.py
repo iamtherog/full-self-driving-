@@ -27,6 +27,7 @@ from ..route import Route, Segment, TrafficLight
 from ..sim import Scenario, run
 from ..world import LeadVehicle, SpeedChange
 from .events import TokenSpec, events
+from .monitor import reason_for
 
 MPH = 0.44704
 #: ITE yellow change interval, y = t + v / (2a) on level grade, with perception-
@@ -119,6 +120,7 @@ class Drive:
     seed: int
     kind: str
     tokens: tuple[str, ...]
+    reasons: tuple[str, ...]    # per event: the key the monitor would give if it were flagged
 
 
 @dataclass
@@ -152,8 +154,10 @@ def record(seed: int, spec: TokenSpec) -> tuple[Drive, str | None]:
     result = run(scenario, observer=recorder)
     reason = exclusion_reason(result.log["mode"], result.aeb_activations, result.collision,
                               result.red_light_violations)
-    tokens = tuple(e.token for e in events(recorder.snapshots, spec))
-    return Drive(seed, scenario.description, tokens), reason
+    evs = list(events(recorder.snapshots, spec))
+    drive = Drive(seed, scenario.description, tuple(e.token for e in evs),
+                  tuple(reason_for(e.features)[0] for e in evs))
+    return drive, reason
 
 
 def build(seeds: Sequence[int], spec: TokenSpec, workers: int | None = None) -> Corpus:

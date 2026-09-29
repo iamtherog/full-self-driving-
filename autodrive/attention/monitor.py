@@ -13,9 +13,19 @@ Division of labour:
 
 Delivery rules keep the monitor in a supporting role:
 
-* It stays quiet while the safety supervisor has an alert up. The supervisor's
-  deterministic alerts (EMERGENCY BRAKING, TAKE CONTROL) always take precedence,
-  and a second message on top of them would compete for the same attention.
+* It only voices what the system measured and nobody has told the driver:
+  closing on the vehicle ahead, hard braking, a large lane offset, stale
+  perception (:data:`DELIVERABLE`). Emergency braking and faults belong to the
+  safety supervisor, which announces them itself. Driver actions are known to
+  the driver. A window that is statistically unusual with no concrete reason is
+  kept for post-drive review: "something is unusual" is not something a driver
+  can act on, and vague alerts train drivers to ignore every alert.
+
+* It stays quiet while the safety supervisor has an alert up, and for the
+  hold-off period after one clears. The supervisor's deterministic alerts
+  (EMERGENCY BRAKING, TAKE CONTROL) always take precedence. A second message on
+  top of them, or an echo of the same incident just after, would compete for
+  the same attention.
 * It only speaks while the system has full control. When the driver is already
   steering or driving, "stay alert" is noise.
 * After an advisory it holds off for ``model.holdoff`` seconds, to limit alert
@@ -50,6 +60,13 @@ TEMPLATES: dict[str, str] = {
     "unusual": "unusual sequence of driving events",
 }
 SEVERITY: dict[str, int] = {key: len(TEMPLATES) - i for i, key in enumerate(TEMPLATES)}
+
+#: Reasons the monitor may put in front of the driver. The rest are recorded for
+#: review only: emergency braking and faults are announced by the safety
+#: supervisor, which owns those alerts; driver actions are already known to the
+#: driver; and "unusual" gives the driver nothing to act on.
+DELIVERABLE = frozenset({"stale", "closing", "braking", "lane"})
+DELIVERABLE_SEVERITIES = frozenset(SEVERITY[key] for key in DELIVERABLE)
 PREFIX = "Stay alert: "
 
 
@@ -98,8 +115,11 @@ class AttentionMonitor:
         self._history: list[str] = []
         self._last_delivered = -math.inf
         self._last_severity = 0
+        self._last_alert = -math.inf    # last time the safety supervisor had an alert up
 
     def observe(self, snapshot: Snapshot) -> Advisory | None:
+        if snapshot.alert is not None:
+            self._last_alert = snapshot.t
         event = self._windower.push(snapshot)
         if event is None:
             return None
@@ -121,8 +141,12 @@ class AttentionMonitor:
         return Advisory(snapshot.t, message, bits)
 
     def _withhold(self, snapshot: Snapshot, severity: int) -> str | None:
+        if severity not in DELIVERABLE_SEVERITIES:
+            return "not the monitor's to announce; kept for review"
         if snapshot.alert is not None:
             return "safety alert active"
+        if snapshot.t - self._last_alert < self.model.holdoff:
+            return "follows a safety alert"      # the tail of the same incident, already announced
         if snapshot.mode == "lat_override":
             return "driver already steering"
         if snapshot.mode != "engaged":

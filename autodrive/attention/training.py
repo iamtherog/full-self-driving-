@@ -30,6 +30,7 @@ from . import corpus as corpus_module
 from .events import TokenSpec
 from .kneser_ney import KneserNey
 from .model import AttentionModel
+from .monitor import DELIVERABLE
 from .sprt import SPRT
 
 
@@ -157,6 +158,9 @@ def train(plan: Plan | None = None, spec: TokenSpec | None = None, *,
 
     test_flagged = [f for d in test for f in flagged(d)]
     test_flags = sum(test_flagged)
+    # Flags the monitor would put in front of the driver: those whose reason is in
+    # monitor.DELIVERABLE. An upper bound: the hold-off is not applied here.
+    test_shown = sum(f and r in DELIVERABLE for d in test for f, r in zip(flagged(d), d.reasons, strict=True))
     hours = len(test_flagged) * spec.window / 3600.0
     metrics = {
         "vocabulary": len(lm.vocabulary),
@@ -169,6 +173,9 @@ def train(plan: Plan | None = None, spec: TokenSpec | None = None, *,
         "test_flags_per_hour": round(test_flags / hours, 3),
         "test_flags_per_hour_95ci": [round(x / hours, 3) for x in poisson_interval(test_flags)],
         "test_drives_with_a_flag": sum(any(flagged(d)) for d in test),
+        "test_advisories": test_shown,
+        "test_advisories_per_hour": round(test_shown / hours, 3),
+        "test_advisories_per_hour_95ci": [round(x / hours, 3) for x in poisson_interval(test_shown)],
         "test_novel_events": sum(t not in lm.vocabulary for d in test for t in d.tokens),
     }
     provenance = {

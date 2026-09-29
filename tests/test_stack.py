@@ -107,6 +107,22 @@ def test_a_decision_to_stop_at_yellow_is_not_reversed_by_lag():
     assert later.behavior == "stop_for_light"
 
 
+def test_the_go_decision_allows_for_brake_buildup():
+    # 46 m from the line at 15.65 m/s: v^2/2d alone says 2.75 m/s^2 (stop), but
+    # 0.6 s of build-up eats 9.4 m and the real requirement is 3.5 m/s^2 (go).
+    planner = Planner(Route([Segment(500, 0.0, 16.0)]), CFG.planner)
+    assert planner.plan(frame(light=LightEstimate(46.0, "yellow")), 15.65).behavior != "stop_for_light"
+
+
+def test_a_stop_in_progress_does_not_count_brake_buildup_again():
+    # Once braking, the build-up is behind us: 24.2 m at 11.85 m/s needs 3.1 m/s^2,
+    # well within the red limit. Counting build-up again would claim 4.5 and abandon the stop.
+    planner = Planner(Route([Segment(500, 0.0, 15.0)]), CFG.planner)
+    first = planner.plan(frame(s=0.0, light=LightEstimate(40.0, "yellow")), 12.0)
+    later = planner.plan(frame(s=15.8, light=LightEstimate(24.2, "yellow")), 11.85)
+    assert first.behavior == later.behavior == "stop_for_light"
+
+
 def test_a_commitment_to_go_lapses_if_the_car_slows_before_the_line():
     planner = Planner(Route([Segment(500, 0.0, 15.0)]), CFG.planner)
     assert planner.plan(frame(s=0.0, light=LightEstimate(10.0, "yellow")), 13.0).behavior != "stop_for_light"
