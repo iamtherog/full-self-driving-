@@ -9,6 +9,7 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
+import numpy.typing as npt
 
 from .config import SensorParams, VehicleParams
 from .route import Route
@@ -50,7 +51,7 @@ class LeadTracker:
 
     def __init__(self, gap_noise: float, speed_noise: float):
         self.R = np.diag([gap_noise ** 2, speed_noise ** 2])
-        self.x: np.ndarray | None = None
+        self.x: npt.NDArray[np.float64] | None = None
         self.P = np.eye(2)
 
     def update(self, gap: float, rel_speed: float, dt: float) -> tuple[float, float]:

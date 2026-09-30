@@ -8,6 +8,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 from matplotlib.axes import Axes
 
 from .sim import Result, Scenario
@@ -78,9 +79,9 @@ def save_report(scenario: Scenario, result: Result, path: str) -> None:
     plt.close(fig)
 
 
-def _shade(ax: Axes, t: np.ndarray, log: dict[str, list[Any]]) -> None:
+def _shade(ax: Axes, t: npt.NDArray[np.float64], log: dict[str, list[Any]]) -> None:
     """Red bands where emergency braking fired."""
-    aeb = np.array(log["aeb"])
-    if aeb.any():
+    aeb = [bool(a) for a in log["aeb"]]
+    if any(aeb):
         ax.fill_between(t, 0, 1, where=aeb, color="#c62828", alpha=0.15,
                         transform=ax.get_xaxis_transform(), lw=0)
