@@ -365,7 +365,7 @@ result is about 1,400 lines of Python (13 source files plus the tests).
 ### Attention monitor (later prompts)
 
 Later prompts added a README safety notice, merged the work, produced a
-sizzle video (on the `sizzle-video` branch), and then asked for the author's
+sizzle video (`media/sizzle/autodrive_sizzle.mp4`), and then asked for the author's
 offline n-gram generator to be applied to the stack so that it *reinforces*
 the driver's role and attention rather than replacing it, runs entirely
 offline, is verified end to end, and credits its creator. That produced the
