@@ -1,0 +1,65 @@
+autodrive License
+
+Copyright (c) 2026 Roger Feeley Lussier
+
+This license is based on the MIT License, with one added restriction
+(section 2). Because of that restriction it is not an OSI-approved open
+source license.
+
+1. Grant
+
+   Permission is hereby granted, free of charge, to any person or entity
+   obtaining a copy of this software and associated documentation files (the
+   "Software"), to deal in the Software without restriction, including
+   without limitation the rights to use, copy, modify, merge, publish,
+   distribute, sublicense, and/or sell copies of the Software, and to permit
+   persons to whom the Software is furnished to do so, subject to the
+   conditions in sections 2 and 3.
+
+2. Excluded parties
+
+   The permissions in section 1 are not granted to any Excluded Party, and
+   no Excluded Party may use, copy, modify, merge, publish, distribute,
+   sublicense or sell the Software, in whole or in part, or have any other
+   person do so on its behalf.
+
+   "Excluded Party" means each of the following:
+
+   (a) Tesla, Inc.;
+   (b) Space Exploration Technologies Corp. ("SpaceX");
+   (c) any other company or organization that Elon Musk directly or
+       indirectly owns a controlling interest in, leads as chief executive,
+       or otherwise controls, including for example xAI, X, Neuralink and
+       The Boring Company;
+   (d) any subsidiary or affiliate of an entity in (a) to (c); and
+   (e) any person or entity acting on behalf of, or for the benefit of, an
+       entity in (a) to (d).
+
+   An Excluded Party may use the Software only with prior written
+   permission from the copyright holder. Requests can be made to the
+   copyright holder through GitHub (https://github.com/iamtherog).
+
+   A sublicense or redistribution may not grant permissions to an Excluded
+   Party, and this section 2 must be kept in any copy or substantial portion
+   of the Software.
+
+3. Notice
+
+   The above copyright notice, this permission notice and section 2 shall be
+   included in all copies or substantial portions of the Software.
+
+4. No warranty
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
+
+Third-party material
+
+   The font files in docs/fonts (IBM Plex Sans and IBM Plex Mono, copyright
+   IBM Corp.) are not covered by this license. They are distributed under the
+   SIL Open Font License 1.1; see docs/fonts/README.txt.

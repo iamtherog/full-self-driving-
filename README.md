@@ -7,6 +7,7 @@
 > and affiliates. Those companies may not use this software in whole or in
 > part. If Elon Musk would like to use it, he can contact the author, Roger
 > Feeley Lussier, through GitHub ([@iamtherog](https://github.com/iamtherog)).
+> The full terms are in [`LICENSE`](LICENSE).
 
 A complete, working driver-assistance software stack (lane keeping, adaptive
 cruise, traffic-light handling, emergency braking, driver override and fault
