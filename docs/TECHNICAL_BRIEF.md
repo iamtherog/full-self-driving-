@@ -44,6 +44,14 @@ Design rules, each enforced in code:
 All six scenarios pass on both, with peak lane error 3-11 cm (kinematic) and
 4-15 cm (dynamic).
 
+**Against a 2026 Corolla:** dimensions, mass and turning circle match published
+figures (within 1-2 %). The simulated car is slightly slower to 60 mph (9.2 s vs
+7.8-8.9 s tested), so it never flatters the results. The braking limit and tire
+grip are not verified and were chosen conservatively. Feature by feature, the
+stack covers the vehicle-following, lane-centering and lane-departure parts of
+Toyota Safety Sense 3.0 in simulation. It does not cover pedestrian, cyclist or
+intersection detection, road signs or high beams.
+
 ## Attention monitor
 
 An interpolated modified Kneser-Ney n-gram model (Chen & Goodman 1999) of the
@@ -75,7 +83,7 @@ an independent implementation from the published algorithms.
 
 | What | How it is checked |
 | --- | --- |
-| Correctness | 100 tests: unit, closed-loop, and property tests (e.g. every Kneser-Ney distribution sums to 1 for seen and unseen contexts) |
+| Correctness | 105 tests: unit, closed-loop, and property tests (e.g. every Kneser-Ney distribution sums to 1 for seen and unseen contexts) |
 | Tests that matter | Mutation testing: each part of the planner and vehicle-model fixes was disabled in turn, and a test fails every time |
 | Isolation | Every scenario driven with and without the monitor; logs must be identical |
 | Reproducibility | Shipped model retrained from recorded seeds reproduces its SHA-256 bit for bit (`attention verify`) |
@@ -106,7 +114,8 @@ without knowing the signal timing.
 - Single lane: no lane changes, pedestrians or cross traffic.
 - Perception is simulated noise on ground truth, not camera images.
 - The dynamic model has lateral slip only (no longitudinal slip, load transfer
-  or suspension) and representative, not measured, parameters.
+  or suspension). Braking limit, grip, cornering stiffness and yaw inertia are
+  not verified against published Corolla data.
 - The attention monitor has only seen simulated drives; its false-alarm rate on
   real traffic is unknown. It is not a certified driver monitoring system.
 - Nothing is validated against real vehicle data.
@@ -115,7 +124,7 @@ without knowing the signal timing.
 
 ```
 pip install -r requirements-dev.txt
-python -m pytest                          # 99 tests (~40 s)
+python -m pytest                          # 104 tests (~40 s)
 python -m pytest -m slow                  # bit-for-bit retrain (~4 min)
 python -m autodrive                       # scorecard, kinematic vehicle
 python -m autodrive --dynamic             # scorecard, tire-slip vehicle

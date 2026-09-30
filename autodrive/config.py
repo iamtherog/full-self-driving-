@@ -1,7 +1,20 @@
 """Tunable parameters for the vehicle model, planner, controllers and safety layer.
 
-Vehicle numbers are representative of a 2026 Toyota Corolla sedan.
-They are simulation parameters, not values read from a real car.
+Vehicle numbers are simulation parameters for a 2026 Toyota Corolla sedan (2.0 L,
+CVT), not values read from a real car. Checked against published specifications
+(2026 LE unless noted; tests/test_corolla.py):
+
+    wheelbase        2.70 m    published 106 in (2.69 m)
+    length           4.63 m    published 182.5 in (4.64 m)
+    width            1.78 m    published 70.1 in (1.78 m)
+    mass             1415 kg   published curb weight 2,955 lb (1,340 kg) + 75 kg driver
+    max_steer        0.60 rad  gives a 35.7-36.3 ft turning circle; published 36 ft
+    max_accel        3.0 m/s^2 gives 0-60 mph in 9.2 s; published tests 7.8-8.9 s,
+                               so the simulated car is slightly less capable
+
+Not verified against a published source, and chosen conservatively: max_decel
+(0.82 g), friction (0.9), cornering stiffnesses, yaw_inertia and cg_to_front.
+steer_ratio is informational only; nothing uses it.
 """
 
 from dataclasses import dataclass, field
@@ -25,7 +38,7 @@ class VehicleParams:
     model: str = "kinematic"
     # Dynamic model only. Representative values for a C-segment sedan, not
     # measured on a Corolla.
-    mass: float = 1400.0               # kg, with driver
+    mass: float = 1415.0               # kg: 2026 LE curb weight (1,340 kg) + 75 kg driver
     yaw_inertia: float = 2200.0        # kg m^2
     cg_to_front: float = 1.08          # m, lf; lr = 2.70 - 1.08 = 1.62, so 60 % of weight is on the front
     cornering_stiffness_front: float = 80_000.0   # N/rad, whole axle

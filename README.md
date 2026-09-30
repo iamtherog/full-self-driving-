@@ -14,7 +14,7 @@
 A complete, working driver-assistance software stack (lane keeping, adaptive
 cruise, traffic-light handling, emergency braking, driver override and fault
 handling) that drives a **simulated** 2026 Toyota Corolla sedan. The stack is
-exercised by six closed-loop scenarios and 100 automated tests, on two vehicle
+exercised by six closed-loop scenarios and 105 automated tests, on two vehicle
 models (kinematic, and a dynamic model with tire slip). An offline
 [attention monitor](#attention-monitor), an n-gram model of ordinary driving,
 watches the drive and warns the driver when it stops looking ordinary. It never
@@ -43,7 +43,7 @@ pip install -r requirements.txt
 python -m autodrive                    # run every scenario, print a scorecard
 python -m autodrive city --plots out/  # one scenario, with a PNG report
 python -m autodrive --dynamic          # the same scenarios on the tire-slip vehicle model
-python -m pytest                       # 99 tests, ~40 s (one slow test deselected)
+python -m pytest                       # 104 tests, ~40 s (one slow test deselected)
 python -m pytest -m slow               # retrains the shipped model and checks it bit for bit (~4 min)
 
 python -m autodrive --attention        # scenarios, plus the attention monitor's flags
@@ -166,6 +166,51 @@ Each scenario has a report in [`docs/`](docs/). This one is the emergency
 stop:
 
 ![hard brake report](docs/hard_brake.png)
+
+## Checked against a 2026 Corolla
+
+The simulated car was compared with published figures for the 2026 Corolla
+sedan (LE, 2.0 L, CVT). `tests/test_corolla.py` checks each row that has a
+published figure.
+
+| | Simulated | Published | Result |
+| --- | --- | --- | --- |
+| Wheelbase | 2.70 m | 106 in (2.69 m) | match |
+| Length / width | 4.63 m / 1.78 m | 182.5 in / 70.1 in (4.64 m / 1.78 m) | match |
+| Mass | 1,415 kg | 2,955 lb curb (1,340 kg), plus a 75 kg driver | match |
+| Turning circle | 35.7-36.3 ft (from steering lock and geometry) | 36 ft | match |
+| 0-60 mph | 9.2 s | 7.8-8.9 s in instrumented tests | slightly slower (conservative) |
+| Braking limit | 0.82 g | not found for the sedan | unverified, chosen conservatively |
+| Tire grip | μ = 0.9 | not found for the sedan | unverified |
+
+The simulated car is never more capable than the real one where a figure was
+available. The stack also asks far less of it than it can do: at most +2.0 /
+−3.5 m/s² in normal driving and 3 m/s² of lateral acceleration.
+
+**Features compared with Toyota Safety Sense 3.0**, which is standard on the
+2026 Corolla:
+
+| Toyota Safety Sense 3.0 | This stack (in simulation) |
+| --- | --- |
+| Pre-Collision System: vehicles, pedestrians, cyclists, motorcyclists, intersection support | AEB for the vehicle ahead in the lane only. No pedestrians, cyclists or intersections. |
+| Full-Speed Range Dynamic Radar Cruise Control | Car following with stop-and-go (Intelligent Driver Model), plus slowing for curves and speed limits |
+| Lane Tracing Assist (lane lines and/or the vehicle ahead) | Lane centering from lane lines only |
+| Lane Departure Alert with Steering Assist | Lane departure over 1.2 m raises TAKE CONTROL and slows the car |
+| Road Sign Assist | None. Speed limits come from the map. |
+| Automatic High Beams | None |
+| (not among the listed TSS 3.0 features) | Stopping for red lights, the yellow-light decision, the attention monitor |
+
+The biggest gaps are vulnerable road users and intersections, which this
+single-lane simulator does not model at all.
+
+Sources: [CarsDirect](https://www.carsdirect.com/toyota/corolla/2026/specs),
+[Cars.com](https://www.cars.com/research/toyota-corolla-2026/specs/),
+[The Car Connection](https://www.thecarconnection.com/specifications/toyota_corolla_2026),
+[Edmunds](https://www.edmunds.com/toyota/corolla/2026/st-402083275/features-specs/),
+[0-60specs](https://www.0-60specs.com/toyota/corolla-0-60-times),
+[U.S. News](https://cars.usnews.com/cars-trucks/toyota/corolla/performance),
+[Toyota Safety Sense](https://www.toyota.com/safety-sense/vehicle/corolla-hatchback/2026/),
+[Buy a Toyota: 2026 Corolla](https://www.buyatoyota.com/home/vehicles/corolla/2026/).
 
 ## Vehicle models
 
@@ -360,7 +405,8 @@ This is a demonstration of architecture and control design, not a product:
   through a neural network.
 - The dynamic vehicle model is a single-track model with lateral tire slip
   only: no longitudinal slip, no load transfer, no suspension, and
-  representative (not measured) sedan parameters.
+  some parameters (braking limit, grip, cornering stiffness, yaw inertia) not
+  verified against published Corolla data. See "Checked against a 2026 Corolla".
 - Nothing here is validated against real vehicle data.
 - The attention monitor has been evaluated only on simulated drives from the
   same generator family it was trained on. Its false-alarm rate on real
