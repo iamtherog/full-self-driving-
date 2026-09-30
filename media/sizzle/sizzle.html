@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>autodrive sizzle</title>
+<!-- Archivo + IBM Plex Mono, downloaded from Google Fonts by fonts/fetch (OFL) -->
+<link href="fonts/fonts.css" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c0d;
+    --ink: #f2efe9;
+    --dim: #8b918f;
+    --faint: rgba(242, 239, 233, 0.14);
+    --amber: #ffb23f;
+    --go: #3ddc97;
+    --stop: #ff4d3d;
+    --display: "Archivo", sans-serif;
+    --mono: "IBM Plex Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); color: var(--ink); }
+  body { font-family: var(--mono); -webkit-font-smoothing: antialiased; }
+  #stage { position: absolute; inset: 0; }
+  canvas { position: absolute; inset: 0; }
+  .layer { position: absolute; inset: 0; pointer-events: none; }
+  #vignette { background: radial-gradient(ellipse 75% 70% at 50% 45%, transparent 55%, rgba(0,0,0,0.55) 100%); }
+  #scrim { background:
+      linear-gradient(to top, rgba(10,12,13,0.92) 0%, rgba(10,12,13,0.6) 16%, transparent 34%),
+      linear-gradient(to right, rgba(10,12,13,0.78) 0%, rgba(10,12,13,0.35) 38%, transparent 60%); }
+  #alarm { opacity: 0; box-shadow: inset 0 0 220px 40px rgba(255, 60, 45, 0.55); }
+
+  /* chapter + clock */
+  #chapter { position: absolute; left: 96px; top: 76px; display: flex; align-items: baseline; gap: 18px;
+             font-size: 20px; letter-spacing: 0.16em; text-transform: uppercase; }
+  #chapter .num { color: var(--amber); font-weight: 600; }
+  #chapter .of { color: var(--dim); }
+  #chapter .rule { width: 56px; height: 1px; background: var(--faint); align-self: center; }
+  #clock { position: absolute; right: 96px; top: 76px; text-align: right; font-size: 18px; line-height: 1.6;
+           letter-spacing: 0.12em; color: var(--dim); text-transform: uppercase; }
+  #clock b { color: var(--ink); font-weight: 500; }
+
+  /* headline */
+  #headline { position: absolute; left: 96px; bottom: 236px; width: 1300px; }
+  #kicker { font-size: 20px; letter-spacing: 0.18em; color: var(--amber); text-transform: uppercase;
+            margin-bottom: 26px; font-weight: 500; }
+  .hl-line { overflow: hidden; padding-bottom: 0.08em; }
+  .hl-line span { display: inline-block; font-family: var(--display); font-weight: 780;
+                  font-variation-settings: "wdth" 86; font-size: 100px; line-height: 0.98;
+                  letter-spacing: -0.012em; white-space: nowrap; }
+  .hl-line.soft span { color: var(--dim); }
+
+  /* telemetry */
+  #telemetry { position: absolute; left: 96px; right: 96px; bottom: 72px; height: 104px;
+               display: grid; grid-template-columns: 1.15fr 1fr 1fr 1fr 1.6fr 1.25fr;
+               border-top: 1px solid var(--faint); }
+  .cell { padding: 20px 28px 0 0; }
+  .cell + .cell { padding-left: 28px; border-left: 1px solid var(--faint); }
+  .cell .k { font-size: 15px; letter-spacing: 0.16em; color: var(--dim); text-transform: uppercase; }
+  .cell .v { margin-top: 10px; font-size: 40px; font-weight: 500; letter-spacing: -0.01em;
+             font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cell .v small { font-size: 18px; color: var(--dim); margin-left: 8px; letter-spacing: 0.04em; }
+  .gauge { position: relative; margin-top: 26px; height: 22px; }
+  .gauge .track { position: absolute; left: 0; right: 0; top: 10px; height: 2px; background: var(--faint); }
+  .gauge .zero { position: absolute; left: 63.6%; top: 0; width: 1px; height: 22px; background: var(--dim); }
+  .gauge .bar { position: absolute; top: 7px; height: 8px; }
+  .gauge .ticks { position: absolute; left: 0; right: 0; top: 28px; display: flex; justify-content: space-between;
+                  font-size: 13px; color: var(--dim); letter-spacing: 0.06em; }
+  .pill { display: inline-flex; align-items: center; gap: 12px; margin-top: 12px; padding: 8px 16px 8px 14px;
+          border: 1px solid currentColor; border-radius: 4px; font-size: 20px; font-weight: 600;
+          letter-spacing: 0.14em; text-transform: uppercase; }
+  .pill i { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+
+  /* alert banner */
+  #banner { position: absolute; left: 50%; top: 190px; transform: translateX(-50%); opacity: 0;
+            display: flex; align-items: center; gap: 22px; padding: 18px 30px; border-radius: 6px;
+            background: var(--stop); color: #120302; font-weight: 600; font-size: 28px; letter-spacing: 0.16em;
+            text-transform: uppercase; white-space: nowrap; }
+  #banner small { font-weight: 500; font-size: 18px; letter-spacing: 0.1em; opacity: 0.8; }
+
+  /* progress */
+  #progress { position: absolute; left: 96px; right: 96px; bottom: 36px; display: flex; gap: 8px; }
+  #progress div { flex: 1; height: 2px; background: var(--faint); position: relative; overflow: hidden; }
+  #progress div b { position: absolute; inset: 0; background: var(--ink); transform-origin: left; }
+
+  /* card scenes */
+  .card { position: absolute; inset: 0; opacity: 0; }
+  #stack .title { position: absolute; left: 96px; top: 250px; }
+  #stack .title .hl-line span { font-size: 96px; }
+  #stack .rows { position: absolute; right: 96px; top: 150px; width: 640px; }
+  #stack .row { display: grid; grid-template-columns: 56px 1fr auto; align-items: baseline; height: 84px;
+                padding-top: 26px; border-top: 1px solid var(--faint); font-size: 26px; letter-spacing: 0.02em; }
+  #stack .row:last-child { border-bottom: 1px solid var(--faint); }
+  #stack .row .n { color: var(--dim); font-size: 17px; letter-spacing: 0.1em; }
+  #stack .row .name { font-weight: 500; text-transform: uppercase; letter-spacing: 0.12em; font-size: 22px; }
+  #stack .row .note { color: var(--dim); font-size: 18px; }
+  #stack .row.key .name, #stack .row.key .n { color: var(--amber); }
+  #stack .row.key .note { color: var(--ink); }
+  #stack .stats { position: absolute; left: 96px; bottom: 150px; display: flex; gap: 88px; }
+  #stack .stat .big { font-family: var(--display); font-weight: 760; font-variation-settings: "wdth" 86;
+                      font-size: 120px; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  #stack .stat .big em { font-style: normal; color: var(--dim); }
+  #stack .stat .lbl { margin-top: 14px; font-size: 18px; letter-spacing: 0.16em; color: var(--dim); text-transform: uppercase; }
+
+  #end .mark { position: absolute; left: 96px; top: 330px; font-family: var(--display); font-weight: 820;
+               font-variation-settings: "wdth" 112; font-size: 210px; line-height: 0.9; letter-spacing: -0.045em; }
+  #end .mark span { color: var(--amber); }
+  #end .sub { position: absolute; left: 104px; top: 580px; font-family: var(--display); font-weight: 420;
+              font-variation-settings: "wdth" 100; font-size: 44px; letter-spacing: -0.01em; color: var(--ink); }
+  #end .meta { position: absolute; left: 104px; bottom: 150px; font-size: 20px; letter-spacing: 0.12em;
+               color: var(--dim); line-height: 1.9; text-transform: uppercase; }
+  #end .meta b { color: var(--ink); font-weight: 500; text-transform: none; letter-spacing: 0.02em; }
+  #end .fine { position: absolute; left: 104px; bottom: 72px; right: 96px; padding-top: 22px;
+               border-top: 1px solid var(--faint); font-size: 17px; letter-spacing: 0.06em; color: var(--dim); }
+  #end .fine b { color: var(--ink); font-weight: 500; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="scene" width="1920" height="1080"></canvas>
+  <canvas id="grain" width="1920" height="1080" style="opacity:0.06;mix-blend-mode:screen"></canvas>
+  <div class="layer" id="vignette"></div>
+  <div class="layer" id="scrim"></div>
+  <div class="layer" id="alarm"></div>
+
+  <div class="layer" id="hud">
+    <div id="chapter"><span class="num">01</span><span class="of">/ 07</span><span class="rule"></span><span class="label"></span></div>
+    <div id="clock"></div>
+    <div id="banner"></div>
+    <div id="headline"><div id="kicker"></div><div id="lines"></div></div>
+    <div id="telemetry">
+      <div class="cell"><div class="k">Speed</div><div class="v" id="t-speed"></div></div>
+      <div class="cell"><div class="k">Gap to lead</div><div class="v" id="t-gap"></div></div>
+      <div class="cell"><div class="k">Time to impact</div><div class="v" id="t-ttc"></div></div>
+      <div class="cell"><div class="k">Lane error</div><div class="v" id="t-lat"></div></div>
+      <div class="cell"><div class="k">Acceleration</div>
+        <div class="gauge"><div class="track"></div><div class="zero"></div><div class="bar" id="t-bar"></div>
+          <div class="ticks"><span>−7</span><span>−3.5</span><span>0</span><span>+2 m/s²</span></div></div></div>
+      <div class="cell"><div class="k">System</div><div id="t-mode"></div></div>
+    </div>
+  </div>
+
+  <div class="card" id="stack">
+    <div class="title"><div id="kicker2" style="font-size:20px;letter-spacing:.18em;color:var(--amber);margin-bottom:26px;font-weight:500">ARCHITECTURE</div>
+      <div class="hl-line"><span>Seven layers.</span></div>
+      <div class="hl-line soft"><span>The last one</span></div>
+      <div class="hl-line soft"><span>can always say no.</span></div></div>
+    <div class="rows"></div>
+    <div class="stats">
+      <div class="stat"><div class="big">6<em>/6</em></div><div class="lbl">Scenarios pass</div></div>
+      <div class="stat"><div class="big">34<em>/34</em></div><div class="lbl">Tests pass</div></div>
+      <div class="stat"><div class="big">0</div><div class="lbl">Collisions</div></div>
+    </div>
+  </div>
+
+  <div class="card" id="end">
+    <div class="mark">autodrive<span>.</span></div>
+    <div class="sub">A driver-assistance stack, tested in simulation.</div>
+    <div class="meta">Vehicle model · <b>2026 Toyota Corolla sedan (simulated)</b><br>Source · <b>github.com/iamtherog/full-self-driving-</b></div>
+    <div class="fine"><b>Speculative software. Simulation only.</b> Not for use on a real vehicle. All footage is rendered from the project's own simulation runs.</div>
+  </div>
+
+  <div id="progress"></div>
+</div>
+
+<script>
+const W = 1920, H = 1080, FPS = 30, TOTAL = 30 * FPS;
+const MPH = 2.23694;
+const C = { bg: "#0a0c0d", ink: "#f2efe9", dim: "#8b918f", amber: "#ffb23f", go: "#3ddc97", stop: "#ff4d3d" };
+const ctx = document.getElementById("scene").getContext("2d");
+const $ = (id) => document.getElementById(id);
+
+// ---------- copy & camera per shot ----------------------------------------
+const SHOTS = {
+  open:  { label: "Highway", kicker: "100 Hz control loop", lines: ["Every 10 milliseconds,", "a decision."],
+           cam: { h: 4.4, back: 10.5, ahead: 26, f: 1150 } },
+  lane:  { label: "Lane keeping", kicker: "Stanley steering · curvature feedforward", lines: ["Holds its lane", "to within 6 cm."],
+           cam: { h: 3.4, back: 9.0, ahead: 24, f: 1150, orbit: -0.22 } },
+  brake: { label: "Emergency braking", kicker: "Automatic emergency braking · always on",
+           lines: ["Car ahead stops at 0.8 g.", "It stops 2.9 m short."], split: 0.62,
+           cam: { h: 3.0, back: 10.5, ahead: 22, f: 1200 } },
+  cutin: { label: "Cut-in", kicker: "Kalman-filtered radar tracking", lines: ["Cut off at 14 m.", "No contact."], split: 0.55,
+           cam: { h: 3.2, back: 9.5, ahead: 22, f: 1150, orbit: 0.3 } },
+  light: { label: "City", kicker: "Traffic-light handling", lines: ["Stops for red."],
+           cam: { h: 3.6, back: 10, ahead: 26, f: 1150 } },
+  turn:  { label: "City", kicker: "90° turn · 25 m radius", lines: ["Takes the corner."],
+           cam: { h: 9.5, back: 13, ahead: 14, f: 1050 } },
+  blind: { label: "Sensor failure", kicker: "Fault detection · driver handover", lines: ["When it can't see,", "it tells you."], split: 0.28,
+           cam: { h: 3.8, back: 10, ahead: 24, f: 1150 } },
+};
+const ORDER = ["open", "lane", "brake", "cutin", "light", "turn", "blind"];
+const CHAPTERS = [
+  { id: "01", from: 0, to: 3.4 }, { id: "02", from: 3.4, to: 8 }, { id: "03", from: 8, to: 13 },
+  { id: "04", from: 13, to: 16 }, { id: "05", from: 16, to: 20.4 }, { id: "06", from: 20.4, to: 24.4 },
+  { id: "07", from: 24.4, to: 30 },
+];
+
+let D;  // data from export.py
+
+// ---------- easing ---------------------------------------------------------
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, u) => a + (b - a) * u;
+const easeOut = (u) => 1 - Math.pow(1 - clamp(u), 3);
+const easeInOut = (u) => { u = clamp(u); return u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2; };
+const expoOut = (u) => (u >= 1 ? 1 : 1 - Math.pow(2, -10 * clamp(u)));
+
+// ---------- route ----------------------------------------------------------
+function poseAt(r, s, lat = 0) {
+  const S = r.s; s = clamp(s, 0, S[S.length - 1]);
+  let lo = 0, hi = S.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (S[m] <= s) lo = m; else hi = m; }
+  const u = (s - S[lo]) / Math.max(1e-9, S[hi] - S[lo]);
+  const x = lerp(r.x[lo], r.x[hi], u), y = lerp(r.y[lo], r.y[hi], u);
+  let dy = r.yaw[hi] - r.yaw[lo]; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+  const yaw = r.yaw[lo] + dy * u;
+  return { x: x - lat * Math.sin(yaw), y: y + lat * Math.cos(yaw), yaw };
+}
+
+// ---------- camera ---------------------------------------------------------
+let cam;
+function setCamera(px, py, yaw, h, back, ahead, f, orbit = 0) {
+  const cy = yaw + orbit;
+  const C0 = [px - back * Math.cos(cy), py - back * Math.sin(cy), h];
+  const T = [px + ahead * Math.cos(yaw), py + ahead * Math.sin(yaw), 0];
+  let fw = [T[0] - C0[0], T[1] - C0[1], T[2] - C0[2]];
+  const n = Math.hypot(...fw); fw = fw.map((v) => v / n);
+  // right = fw x up
+  let r = [fw[1], -fw[0], 0];
+  const rn = Math.hypot(...r);
+  r = rn < 1e-6 ? [Math.sin(yaw), -Math.cos(yaw), 0] : r.map((v) => v / rn);
+  const u = [r[1] * fw[2] - r[2] * fw[1], r[2] * fw[0] - r[0] * fw[2], r[0] * fw[1] - r[1] * fw[0]];
+  cam = { C: C0, fw, r, u, f, cx: W * CAM_X, cy: H * 0.44 };
+}
+function proj(x, y, z = 0) {
+  const d = [x - cam.C[0], y - cam.C[1], z - cam.C[2]];
+  const zc = d[0] * cam.fw[0] + d[1] * cam.fw[1] + d[2] * cam.fw[2];
+  const xc = d[0] * cam.r[0] + d[1] * cam.r[1] + d[2] * cam.r[2];
+  const yc = d[0] * cam.u[0] + d[1] * cam.u[1] + d[2] * cam.u[2];
+  return { x: cam.cx + cam.f * xc / zc, y: cam.cy - cam.f * yc / zc, z: zc };
+}
+const NEAR = 0.9;
+let CAM_X = 0.62;
+
+// ---------- drawing helpers ------------------------------------------------
+function poly(pts, fill) {
+  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+}
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+}
+function fogAlpha(z) { return clamp(1 - (z - 60) / 190, 0, 1); }
+
+// strip of quads along the route between lateral offsets a..b, for s in [s0, s1]
+function strip(r, s0, s1, a, b, color, alphaFn = null, step = null) {
+  let prev = null;
+  for (let s = s0; s <= s1; s += step || (0.6 + Math.max(0, s - s0) / 45)) {
+    const pa = poseAt(r, s, a), pb = poseAt(r, s, b);
+    const A = proj(pa.x, pa.y, 0.001), B = proj(pb.x, pb.y, 0.001);
+    const ok = A.z > NEAR && B.z > NEAR;
+    if (prev && ok) {
+      const al = (alphaFn ? alphaFn(s) : 1) * fogAlpha((A.z + prev.A.z) / 2);
+      if (al > 0.003) poly([prev.A, prev.B, B, A], hexA(color, al));
+    }
+    prev = ok ? { A, B } : null;
+  }
+}
+function dashed(r, s0, s1, lat, w, on, off, color, alpha = 1) {
+  const period = on + off;
+  let s = Math.floor(s0 / period) * period;
+  for (; s < s1; s += period) {
+    const a = Math.max(s, s0), b = Math.min(s + on, s1);
+    if (b > a) strip(r, a, b, lat - w / 2, lat + w / 2, color, () => alpha, (b - a) / 2);
+  }
+}
+
+function drawGround(px, py, yaw, t) {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, "#07090a"); g.addColorStop(1, "#0c0f10");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // horizon glow
+  const hz = proj(px + 1e4 * Math.cos(yaw), py + 1e4 * Math.sin(yaw), 0).y;
+  if (hz > -200 && hz < H) {
+    const gl = ctx.createLinearGradient(0, hz - 260, 0, hz + 60);
+    gl.addColorStop(0, "rgba(255,178,63,0)"); gl.addColorStop(0.8, "rgba(255,178,63,0.07)");
+    gl.addColorStop(1, "rgba(255,178,63,0)");
+    ctx.fillStyle = gl; ctx.fillRect(0, hz - 260, W, 320);
+  }
+  // world-locked ground dots give a sense of speed
+  const sp = 7, cxw = px + 45 * Math.cos(yaw), cyw = py + 45 * Math.sin(yaw);
+  const gx0 = Math.floor((cxw - 110) / sp) * sp, gy0 = Math.floor((cyw - 110) / sp) * sp;
+  for (let gx = gx0; gx < cxw + 110; gx += sp) {
+    for (let gy = gy0; gy < cyw + 110; gy += sp) {
+      const p = proj(gx, gy, 0);
+      if (p.z < NEAR || p.x < -20 || p.x > W + 20 || p.y < 0 || p.y > H) continue;
+      const a = 0.35 * fogAlpha(p.z) * clamp(p.z / 8);
+      const rad = clamp(cam.f * 0.045 / p.z, 0.6, 3.2);
+      ctx.fillStyle = `rgba(242,239,233,${a})`;
+      ctx.fillRect(p.x - rad / 2, p.y - rad / 2, rad, rad);
+    }
+  }
+}
+
+function drawRoad(r, carS) {
+  const s0 = Math.max(0, carS - 30), s1 = Math.min(r.s[r.s.length - 1], carS + 260);
+  strip(r, s0, s1, -2.6, 6.2, "#16191b");                 // asphalt
+  strip(r, s0, s1, -1.97, -1.83, "#d9d6cf", () => 0.85);  // right edge line
+  strip(r, s0, s1, 5.48, 5.62, "#d9d6cf", () => 0.6);     // left edge line
+  strip(r, s0, s1, 1.72, 1.82, "#e0a53a", () => 0.85);    // double yellow
+  strip(r, s0, s1, 1.9, 2.0, "#e0a53a", () => 0.85);
+  const end = r.s[r.s.length - 1];
+  return { s0, s1, end };
+}
+
+function drawPlan(r, frontS, v, mode, blind, tNow) {
+  const len = Math.max(14, v * 3.2);
+  if (blind) {
+    // dead-reckoned estimate: short, red, broken
+    const a = 0.5 + 0.2 * Math.sin(tNow * 18);
+    dashed(r, frontS + 0.5, frontS + 12, 0, 0.9, 1.2, 1.2, C.stop, a);
+    return;
+  }
+  const col = mode === "engaged" ? C.amber : C.dim;
+  strip(r, frontS + 0.4, frontS + len, -0.8, 0.8, col,
+        (s) => 0.28 * (1 - (s - frontS) / len), 0.8);
+  strip(r, frontS + 0.4, frontS + len, -0.06, 0.06, col,
+        (s) => 0.9 * (1 - (s - frontS) / len), 0.8);
+}
+
+// ---------- cars -----------------------------------------------------------
+function carFaces(L, Wd, color, glass) {
+  const hw = Wd / 2, cw = hw - 0.1, tw = hw - 0.24;
+  const V = (x, y, z) => [x, y, z];
+  const box = (x0, x1, y0, y1, z0, z1, zf0 = z1, zf1 = z1) => {
+    // zf: top height at front / rear allows a sloped hood/trunk
+    const p = [V(x0, y0, z0), V(x1, y0, z0), V(x1, y1, z0), V(x0, y1, z0),
+               V(x0, y0, zf0), V(x1, y0, zf1), V(x1, y1, zf1), V(x0, y1, zf0)];
+    return p;
+  };
+  const faces = [];
+  const add = (pts, col, kind = "") => faces.push({ pts, col, kind });
+  // wheels
+  for (const wx of [0.98, 3.68]) for (const sgn of [-1, 1]) {
+    const y0 = sgn * (hw - 0.14), y1 = sgn * (hw + 0.02);
+    const b = box(wx - 0.33, wx + 0.33, Math.min(y0, y1), Math.max(y0, y1), 0, 0.62);
+    hexFaces(b, "#050606", add);
+  }
+  // lower body with sloped hood and trunk
+  const bw = hw - 0.07;  // tumblehome: the top of the body is a little narrower
+  const body = [V(0, -hw, 0.22), V(L, -hw, 0.22), V(L, hw, 0.22), V(0, hw, 0.22),
+                V(0.1, -bw, 0.8), V(L - 0.12, -bw, 0.68), V(L - 0.12, bw, 0.68), V(0.1, bw, 0.8)];
+  hexFaces(body, color, add);
+  // dark lower valance / bumper band
+  hexFaces([V(-0.02, -hw + 0.02, 0.16), V(L + 0.02, -hw + 0.02, 0.16), V(L + 0.02, hw - 0.02, 0.16), V(-0.02, hw - 0.02, 0.16),
+            V(-0.02, -hw + 0.02, 0.36), V(L + 0.02, -hw + 0.02, 0.36), V(L + 0.02, hw - 0.02, 0.36), V(-0.02, hw - 0.02, 0.36)],
+           "#16191b", add);
+  // greenhouse
+  const gh = [V(1.2, -bw + 0.03, 0.79), V(3.4, -bw + 0.03, 0.7), V(3.4, bw - 0.03, 0.7), V(1.2, bw - 0.03, 0.79),
+              V(1.85, -tw, 1.42), V(2.75, -tw, 1.43), V(2.75, tw, 1.43), V(1.85, tw, 1.42)];
+  hexFaces(gh, glass, add, color);
+  return faces;
+}
+// faces of a hexahedron given in [bottom 0..3, top 4..7] order; roofCol colors the top
+function hexFaces(p, col, add, roofCol = null) {
+  const F = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]];
+  const names = ["bottom", "top", "right", "front", "left", "rear"];
+  F.forEach((idx, i) => add(idx.map((k) => p[k]), i === 1 && roofCol ? roofCol : col, names[i]));
+}
+
+function drawCar(pose, L, Wd, rearOffset, color, glass, braking, isEgo) {
+  const c = Math.cos(pose.yaw), s = Math.sin(pose.yaw);
+  const toW = (v) => [pose.x + (v[0] - rearOffset) * c - v[1] * s, pose.y + (v[0] - rearOffset) * s + v[1] * c, v[2]];
+  // soft shadow
+  const sh = [];
+  for (let i = 0; i < 20; i++) {
+    const a = (i / 20) * Math.PI * 2;
+    const w = toW([L / 2 + Math.cos(a) * (L / 2 + 0.5), Math.sin(a) * (Wd / 2 + 0.35), 0]);
+    const p = proj(...w); if (p.z < NEAR) return; sh.push(p);
+  }
+  ctx.save(); ctx.filter = "blur(10px)"; poly(sh, "rgba(0,0,0,0.75)"); ctx.restore();
+
+  const light = [-0.35, 0.45, 0.82];
+  const faces = carFaces(L, Wd, color, glass).map((f) => {
+    const w = f.pts.map(toW);
+    const e1 = w[1].map((v, i) => v - w[0][i]), e2 = w[2].map((v, i) => v - w[0][i]);
+    const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    const nl = Math.hypot(...n) || 1; n.forEach((_, i) => (n[i] /= nl));
+    const ctr = [0, 1, 2].map((i) => w.reduce((a, p) => a + p[i], 0) / w.length);
+    const toCam = cam.C.map((v, i) => v - ctr[i]);
+    const vis = n[0] * toCam[0] + n[1] * toCam[1] + n[2] * toCam[2] > 0;
+    const d = Math.hypot(...toCam);
+    return { ...f, w, n, vis, d };
+  }).filter((f) => f.vis && f.kind !== "bottom").sort((a, b) => b.d - a.d);
+
+  for (const f of faces) {
+    const P = f.w.map((v) => proj(...v)); if (P.some((p) => p.z < NEAR)) return;
+    const lum = 0.42 + 0.58 * clamp(f.n[0] * light[0] + f.n[1] * light[1] + f.n[2] * light[2]);
+    poly(P, shade(f.col, lum));
+    if (f.kind === "rear" && f.col === color) drawLamps(toW, Wd, braking, "rear");
+    if (f.kind === "front" && f.col === color && isEgo) drawLamps(toW, Wd, false, "front", L);
+  }
+}
+function shade(hex, k) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgb(${Math.round((n >> 16) * k)},${Math.round(((n >> 8) & 255) * k)},${Math.round((n & 255) * k)})`;
+}
+function drawLamps(toW, Wd, on, end, L = 0) {
+  const hw = Wd / 2;
+  for (const sgn of [-1, 1]) {
+    const x = end === "rear" ? -0.02 : L - 0.03;
+    const q = [[x, sgn * (hw - 0.06), 0.6], [x, sgn * (hw - 0.44), 0.6], [x, sgn * (hw - 0.44), 0.72], [x, sgn * (hw - 0.06), 0.72]];
+    const P = q.map((v) => proj(...toW(v)));
+    if (P.some((p) => p.z < NEAR)) return;
+    ctx.save();
+    if (end === "rear") {
+      ctx.shadowColor = on ? "rgba(255,50,35,1)" : "rgba(255,40,30,0.5)";
+      ctx.shadowBlur = on ? 38 : 10;
+      poly(P, on ? "#ff3b2a" : "#7a1712");
+    } else {
+      ctx.shadowColor = "rgba(255,240,220,0.9)"; ctx.shadowBlur = 20;
+      poly(P, "#fff4e2");
+    }
+    ctx.restore();
+  }
+}
+
+function drawBeams(pose, frontX) {
+  const c = Math.cos(pose.yaw), s = Math.sin(pose.yaw);
+  const toW = (x, y) => [pose.x + x * c - y * s, pose.y + x * s + y * c, 0.002];
+  const pts = [toW(frontX, -0.7), toW(frontX + 34, -4.2), toW(frontX + 34, 4.2), toW(frontX, 0.7)].map((v) => proj(...v));
+  if (pts.some((p) => p.z < NEAR)) return;
+  const a = proj(...toW(frontX, 0)), b = proj(...toW(frontX + 34, 0));
+  const g = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+  g.addColorStop(0, "rgba(255,236,205,0.16)"); g.addColorStop(1, "rgba(255,236,205,0)");
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; poly(pts, g); ctx.restore();
+}
+
+function drawLight(r, s, state) {
+  const base = poseAt(r, s, -3.4), arm = poseAt(r, s, 0.2), stop0 = poseAt(r, s, -1.85), stop1 = poseAt(r, s, 1.75);
+  // stop line
+  const n0 = poseAt(r, s - 0.45, -1.85), n1 = poseAt(r, s - 0.45, 1.75);
+  const sl = [proj(stop0.x, stop0.y, 0.003), proj(stop1.x, stop1.y, 0.003), proj(n1.x, n1.y, 0.003), proj(n0.x, n0.y, 0.003)];
+  if (sl.every((p) => p.z > NEAR)) poly(sl, hexA("#d9d6cf", 0.8 * fogAlpha(sl[0].z)));
+  // pole and mast arm
+  const P0 = proj(base.x, base.y, 0), P1 = proj(base.x, base.y, 5.6), A1 = proj(arm.x, arm.y, 5.6);
+  if ([P0, P1, A1].some((p) => p.z < NEAR)) return;
+  const fa = fogAlpha(P0.z);
+  ctx.strokeStyle = hexA("#5b6164", fa); ctx.lineCap = "round";
+  ctx.lineWidth = clamp(cam.f * 0.16 / P0.z, 1, 14);
+  ctx.beginPath(); ctx.moveTo(P0.x, P0.y); ctx.lineTo(P1.x, P1.y); ctx.lineTo(A1.x, A1.y); ctx.stroke();
+  // signal head facing traffic
+  const head = poseAt(r, s, 0.2);
+  const k = cam.f / proj(head.x, head.y, 5).z;
+  const top = proj(head.x, head.y, 5.5);
+  const hw = 0.2 * k, hh = 1.0 * k;
+  ctx.fillStyle = hexA("#101314", fa); ctx.fillRect(top.x - hw, top.y, hw * 2, hh);
+  ctx.strokeStyle = hexA("#2a2f31", fa); ctx.lineWidth = Math.max(1, 0.02 * k); ctx.strokeRect(top.x - hw, top.y, hw * 2, hh);
+  const cols = { red: C.stop, yellow: "#ffb020", green: C.go };
+  ["red", "yellow", "green"].forEach((st, i) => {
+    const cy = top.y + hh * (0.19 + i * 0.31), rad = 0.12 * k;
+    ctx.save();
+    if (st === state) { ctx.shadowColor = cols[st]; ctx.shadowBlur = Math.max(12, 1.1 * k); }
+    ctx.beginPath(); ctx.arc(top.x, cy, rad, 0, Math.PI * 2);
+    ctx.fillStyle = st === state ? cols[st] : "#1e2324"; ctx.fill(); ctx.restore();
+  });
+  return { x: top.x, y: top.y, k };
+}
+
+// dashed range line on the road between bumpers (drawn under the ego car)
+function drawRange(r, frontS, fr, a) {
+  const a0 = poseAt(r, frontS + 0.3), a1 = poseAt(r, fr.lead_s - 2.45);
+  const p0 = proj(a0.x, a0.y, 0.01), p1 = proj(a1.x, a1.y, 0.01);
+  if (p0.z < NEAR || p1.z < NEAR || fr.gap < 1.5) return;
+  const danger = fr.aeb || (fr.ttc !== null && fr.ttc < 3);
+  ctx.save(); ctx.strokeStyle = danger ? C.stop : C.amber; ctx.setLineDash([6, 8]);
+  ctx.lineWidth = 2; ctx.globalAlpha = a * 0.8;
+  ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke(); ctx.restore();
+}
+
+// lead-vehicle radar box
+function drawTrack(r, frontS, lead, frame, a) {
+  const pose = poseAt(r, lead.s);
+  const c = Math.cos(pose.yaw), s = Math.sin(pose.yaw);
+  const corners = [];
+  for (const x of [-2.45, 2.45]) for (const y of [-1.05, 1.05]) for (const z of [0, 1.55])
+    corners.push(proj(pose.x + x * c - y * s, pose.y + x * s + y * c, z));
+  if (corners.some((p) => p.z < NEAR)) return;
+  const xs = corners.map((p) => p.x), ys = corners.map((p) => p.y);
+  let x0 = Math.min(...xs) - 10, x1 = Math.max(...xs) + 10, y0 = Math.min(...ys) - 10, y1 = Math.max(...ys) + 10;
+  const danger = frame.aeb || (frame.ttc !== null && frame.ttc < 3);
+  const col = danger ? C.stop : C.amber;
+  const t = Math.max(14, (x1 - x0) * 0.18);
+  ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = col; ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  [[x0, y0, 1, 1], [x1, y0, -1, 1], [x1, y1, -1, -1], [x0, y1, 1, -1]].forEach(([x, y, dx, dy]) => {
+    ctx.moveTo(x + dx * t, y); ctx.lineTo(x, y); ctx.lineTo(x, y + dy * t);
+  });
+  ctx.stroke();
+  // label
+  ctx.globalAlpha = a;
+  ctx.font = "500 20px 'IBM Plex Mono'"; ctx.textBaseline = "bottom";
+  const txt = `LEAD  ${lead.gap.toFixed(1)} m  ·  ${(lead.v * MPH).toFixed(0)} mph`;
+  const tw = ctx.measureText(txt).width;
+  ctx.fillStyle = "rgba(10,12,13,0.78)"; ctx.fillRect(x0, y0 - 40, tw + 24, 32);
+  ctx.fillStyle = col; ctx.fillRect(x0, y0 - 40, 3, 32);
+  ctx.fillStyle = C.ink; ctx.fillText(txt, x0 + 14, y0 - 13);
+  ctx.restore();
+}
+
+// ---------- HUD -------------------------------------------------------------
+function setLines(lines, split, u, dur, soft = []) {
+  const box = $("lines");
+  if (box.dataset.key !== lines.join("|")) {
+    box.innerHTML = lines.map((l, i) => `<div class="hl-line${soft.includes(i) ? " soft" : ""}"><span>${l}</span></div>`).join("");
+    box.dataset.key = lines.join("|");
+  }
+  const spans = box.querySelectorAll("span");
+  spans.forEach((sp, i) => {
+    const start = i === 0 || !split ? 0.12 + i * 0.1 : split * dur;
+    const k = expoOut((u - start) / 0.5);
+    const out = easeInOut((u - (dur - 0.28)) / 0.28);
+    sp.style.transform = `translateY(${(1 - k) * 110 + out * -30}%)`;
+    sp.style.opacity = String(1 - out);
+  });
+}
+function reveal(el, u, start, len = 0.5) {
+  const k = expoOut((u - start) / len);
+  el.style.opacity = String(clamp(k * 1.2));
+  el.style.transform = `translateY(${(1 - k) * 24}px)`;
+}
+
+function modePill(frame) {
+  let col = C.go, txt = "Engaged";
+  if (frame.mode === "fault") { col = C.stop; txt = "Fault"; }
+  else if (frame.mode === "off") { col = C.dim; txt = "Driver"; }
+  else if (frame.mode === "lat_override") { col = C.amber; txt = "Override"; }
+  if (frame.aeb) { col = C.stop; txt = "AEB"; }
+  return `<span class="pill" style="color:${col}"><i></i>${txt}</span>`;
+}
+
+function renderHUD(shot, frame, u, dur, tv) {
+  const S = SHOTS[shot.id], idx = ORDER.indexOf(shot.id);
+  const ch = CHAPTERS.find((c) => tv >= c.from && tv < c.to) || CHAPTERS[6];
+  $("chapter").querySelector(".num").textContent = ch.id;
+  $("chapter").querySelector(".label").textContent = S.label;
+  $("clock").innerHTML = `Sim <b>T+${frame.t.toFixed(2)} s</b><br>Playback <b>${shot.rate.toFixed(1)}×</b>`;
+  $("kicker").textContent = S.kicker;
+  reveal($("kicker"), u, 0.05, 0.4);
+  const k = easeInOut((u - (dur - 0.28)) / 0.28);
+  $("kicker").style.opacity = String(clamp(expoOut((u - 0.05) / 0.4)) * (1 - k));
+  setLines(S.lines, S.split ? S.split : 0, u, dur, S.split ? [1] : []);
+
+  const blind = frame.blind;
+  $("t-speed").innerHTML = `${(frame.v * MPH).toFixed(0)}<small>mph</small>`;
+  $("t-gap").innerHTML = frame.gap !== null && !blind ? `${frame.gap.toFixed(1)}<small>m</small>` : `<span style="color:var(--dim)">—</span>`;
+  const ttc = frame.ttc !== null && !blind && frame.v > 0.5 ? frame.ttc : null;
+  $("t-ttc").innerHTML = ttc !== null ? `<span style="color:${ttc < 1.6 ? C.stop : ttc < 3 ? C.amber : C.ink}">${ttc.toFixed(1)}</span><small>s</small>` : `<span style="color:var(--dim)">—</span>`;
+  $("t-lat").innerHTML = blind ? `<span style="color:${C.stop}">NO DATA</span>` : `${(Math.abs(frame.lat) * 100).toFixed(1)}<small>cm</small>`;
+  // accel gauge from -7 to +2 → zero at 7/11 = 63.6%
+  const a = clamp(frame.a, -7, 2), zero = 63.6, scale = 63.6 / 7;
+  const bar = $("t-bar");
+  bar.style.left = `${a < 0 ? zero + a * scale : zero}%`;
+  bar.style.width = `${Math.abs(a) * scale}%`;
+  bar.style.background = a < -3.6 ? C.stop : a < 0 ? C.amber : C.go;
+  $("t-mode").innerHTML = modePill(frame);
+
+  // banners
+  const banner = $("banner");
+  let bOn = 0;
+  if (frame.aeb) { banner.innerHTML = `Emergency braking <small>TTC ${frame.ttc !== null ? frame.ttc.toFixed(1) + " s" : ""}</small>`; bOn = 1; }
+  else if (frame.alert && frame.alert.startsWith("TAKE")) { banner.innerHTML = `Take control <small>perception timeout</small>`; bOn = 1; }
+  const flash = frame.mode === "fault" ? (Math.floor(tv * 4) % 2 === 0 ? 1 : 0.55) : 1;
+  banner.style.opacity = String(bOn * flash);
+  $("alarm").style.opacity = String(frame.aeb ? 0.75 + 0.25 * Math.sin(tv * 20) : frame.mode === "fault" ? 0.5 + 0.3 * Math.sin(tv * 12) : 0);
+}
+
+// ---------- scene render ------------------------------------------------------
+function renderShot(shot, f, tv) {
+  const i = Math.min(shot.frames.length - 1, f);
+  const fr = shot.frames[i];
+  const r = D.routes[shot.scenario];
+  const S = SHOTS[shot.id], dur = shot.v1 - shot.v0, u = tv - shot.v0;
+  const cp = { ...S.cam };
+  const ego = { x: fr.x, y: fr.y, yaw: fr.yaw };
+  let camYaw = fr.cam;
+  if (shot.id === "open") {
+    // crane down from overhead into the chase position
+    const k = easeInOut(u / 2.8);
+    cp.h = lerp(95, cp.h, k); cp.back = lerp(2, cp.back, k); cp.ahead = lerp(6, cp.ahead, k); cp.f = lerp(1000, cp.f, k);
+  }
+  cp.f *= 1 + 0.05 * (u / dur);               // slow push-in
+  const cx = ego.x + 1.3 * Math.cos(ego.yaw), cy = ego.y + 1.3 * Math.sin(ego.yaw);
+  setCamera(cx, cy, camYaw, cp.h, cp.back, cp.ahead, cp.f, cp.orbit || 0);
+
+  drawGround(cx, cy, camYaw, tv);
+  drawRoad(r, fr.s);
+  const frontS = fr.s + 3.63;
+  // traffic lights (sorted farthest first)
+  const lightsSeen = [];
+  r.lights.forEach((ls, j) => { if (ls > fr.s - 20 && ls < fr.s + 240) lightsSeen.push([ls, fr.lights[j]]); });
+  drawBeams(ego, 3.63);
+  drawPlan(r, frontS, fr.v, fr.mode, fr.blind, tv);
+
+  // lead vehicle
+  const prev = shot.frames[Math.max(0, i - 3)];
+  const braking = (fr.lead_v !== null && prev.lead_v !== null && fr.lead_v < prev.lead_v - 0.05);
+  if (fr.lead_s !== null) {
+    const lp = poseAt(r, fr.lead_s);
+    drawCar({ x: lp.x, y: lp.y, yaw: lp.yaw }, 4.7, 1.82, 2.35, "#565d63", "#15191c", braking || fr.lead_v < 0.3, false);
+  }
+  lightsSeen.sort((a, b) => b[0] - a[0]).forEach(([ls, st]) => drawLight(r, ls, st));
+  const trackA = expoOut((u - 0.2) / 0.4);
+  if (fr.lead_s !== null && !fr.blind) drawRange(r, frontS, fr, trackA);
+  const egoBrake = fr.a < -0.4;
+  drawCar(ego, 4.63, 1.78, 1.0, "#bfc3c2", "#161c20", egoBrake, true);
+
+  if (fr.lead_s !== null && !fr.blind) {
+    drawTrack(r, frontS, { s: fr.lead_s, gap: fr.gap, v: fr.lead_v }, fr, trackA);
+  }
+  if (fr.blind) sensorNoise(tv);
+  renderHUD(shot, fr, u, dur, tv);
+}
+
+function sensorNoise(tv) {
+  // perception loss: horizontal tearing bands, deterministic per frame
+  let seed = Math.floor(tv * FPS) * 9301 + 49297;
+  const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  for (let k = 0; k < 7; k++) {
+    const y = rnd() * H, h = 2 + rnd() * 10;
+    ctx.fillStyle = `rgba(255,77,61,${0.03 + rnd() * 0.07})`;
+    ctx.fillRect(0, y, W, h);
+  }
+  ctx.restore();
+}
+
+// ---------- grain (deterministic) ---------------------------------------------
+const grain = document.getElementById("grain").getContext("2d");
+const noise = document.createElement("canvas"); noise.width = noise.height = 256;
+(() => {
+  const g = noise.getContext("2d"), img = g.createImageData(256, 256);
+  let seed = 7;
+  for (let i = 0; i < img.data.length; i += 4) {
+    seed = (seed * 16807) % 2147483647; const v = seed % 255;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+})();
+function renderGrain(f) {
+  grain.clearRect(0, 0, W, H);
+  grain.save(); grain.translate(-((f * 97) % 256), -((f * 61) % 256));
+  grain.fillStyle = grain.createPattern(noise, "repeat"); grain.fillRect(0, 0, W + 256, H + 256); grain.restore();
+}
+
+// ---------- cards ---------------------------------------------------------------
+const LAYERS = [
+  ["World", "road · traffic · lights"], ["Sensors", "camera + radar · 20 Hz"], ["Perception", "Kalman lead tracking"],
+  ["Planner", "most cautious rule wins"], ["Control", "Stanley + PI · 100 Hz"],
+  ["Safety supervisor", "envelope · override · AEB"], ["Vehicle", "bicycle model · 2026 Corolla"],
+];
+function buildCards() {
+  $("stack").querySelector(".rows").innerHTML = LAYERS.map(([n, d], i) =>
+    `<div class="row${i === 5 ? " key" : ""}"><span class="n">${String(i + 1).padStart(2, "0")}</span><span class="name">${n}</span><span class="note">${d}</span></div>`).join("");
+  $("progress").innerHTML = CHAPTERS.map(() => "<div><b></b></div>").join("");
+}
+
+function drawMap(routeName, progress, alpha, box) {
+  const r = D.routes[routeName];
+  const xs = r.x, ys = r.y;
+  const minx = Math.min(...xs), maxx = Math.max(...xs), miny = Math.min(...ys), maxy = Math.max(...ys);
+  const sc = Math.min(box.w / (maxx - minx), box.h / (maxy - miny));
+  const ox = box.x + (box.w - (maxx - minx) * sc) / 2, oy = box.y + (box.h + (maxy - miny) * sc) / 2;
+  const P = (i) => [ox + (xs[i] - minx) * sc, oy - (ys[i] - miny) * sc];
+  const n = xs.length, m = Math.floor(n * clamp(progress));
+  ctx.save(); ctx.globalAlpha = alpha; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(242,239,233,0.12)"; ctx.lineWidth = 16;
+  ctx.beginPath(); ctx.moveTo(...P(0)); for (let i = 1; i < n; i += 2) ctx.lineTo(...P(i)); ctx.stroke();
+  if (m > 1) {
+    ctx.strokeStyle = C.amber; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(...P(0)); for (let i = 1; i < m; i++) ctx.lineTo(...P(i)); ctx.stroke();
+    const [hx, hy] = P(m - 1);
+    ctx.shadowColor = C.amber; ctx.shadowBlur = 24; ctx.fillStyle = C.ink;
+    ctx.beginPath(); ctx.arc(hx, hy, 7, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function renderCards(tv) {
+  const stackOn = tv >= 24.4 && tv < 27.4, endOn = tv >= 27.4;
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  $("hud").style.opacity = "0"; $("alarm").style.opacity = "0";
+  $("stack").style.opacity = stackOn ? "1" : "0";
+  $("end").style.opacity = endOn ? "1" : "0";
+  if (stackOn) {
+    const u = tv - 24.4;
+    $("stack").querySelectorAll(".title .hl-line span").forEach((sp, i) => {
+      const k = expoOut((u - 0.05 - i * 0.12) / 0.5);
+      const out = easeInOut((u - 2.72) / 0.28);
+      sp.style.transform = `translateY(${(1 - k) * 110 - out * 30}%)`; sp.style.opacity = String(1 - out);
+    });
+    reveal($("kicker2"), u, 0, 0.4);
+    $("stack").querySelectorAll(".row").forEach((row, i) => {
+      reveal(row, u, 0.15 + i * 0.09, 0.45);
+      const out = easeInOut((u - 2.72) / 0.28);
+      row.style.opacity = String(parseFloat(row.style.opacity) * (1 - out));
+    });
+    $("stack").querySelectorAll(".stat").forEach((st, i) => {
+      reveal(st, u, 1.1 + i * 0.14, 0.5);
+      const out = easeInOut((u - 2.72) / 0.28);
+      st.style.opacity = String(parseFloat(st.style.opacity) * (1 - out));
+    });
+  }
+  if (endOn) {
+    const u = tv - 27.4;
+    drawMap("highway", easeInOut(u / 2.2), 0.9 * expoOut(u / 0.6), { x: 1300, y: 640, w: 520, h: 220 });
+    const mark = $("end").querySelector(".mark");
+    const k = expoOut(u / 0.7);
+    mark.style.opacity = String(k); mark.style.transform = `translateY(${(1 - k) * 40}px)`;
+    mark.style.fontVariationSettings = `"wdth" ${lerp(80, 112, easeOut(u / 1.2))}`;
+    reveal($("end").querySelector(".sub"), u, 0.25, 0.6);
+    reveal($("end").querySelector(".meta"), u, 0.5, 0.6);
+    reveal($("end").querySelector(".fine"), u, 0.7, 0.6);
+  }
+}
+
+// ---------- entry points ---------------------------------------------------------
+window.init = (data) => { D = data; buildCards(); };
+window.renderFrame = (f) => {
+  const tv = f / FPS;
+  const shot = D.shots.find((s) => tv >= s.v0 && tv < s.v1);
+  if (shot) {
+    $("hud").style.opacity = "1"; $("stack").style.opacity = "0"; $("end").style.opacity = "0";
+    renderShot(shot, Math.round((tv - shot.v0) * FPS), tv);
+  } else {
+    renderCards(tv);
+  }
+  // chapter progress
+  $("progress").querySelectorAll("b").forEach((b, i) => {
+    const c = CHAPTERS[i];
+    b.style.transform = `scaleX(${clamp((tv - c.from) / (c.to - c.from))})`;
+  });
+  renderGrain(f);
+};
+window.TOTAL = TOTAL;
+</script>
+</body>
+</html>
