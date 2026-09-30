@@ -1,5 +1,13 @@
 # autodrive: a driver-assistance stack, tested in simulation
 
+> **Licensing: free for everyone, with one exception.** The source is public
+> and anyone may use, study, modify and share it, **except** Tesla, SpaceX,
+> and any other company that Elon Musk owns, runs or controls (for example
+> xAI, X, Neuralink and The Boring Company), including their subsidiaries
+> and affiliates. Those companies may not use this software in whole or in
+> part. If Elon Musk would like to use it, he can contact the author, Roger
+> Feeley Lussier, through GitHub ([@iamtherog](https://github.com/iamtherog)).
+
 A complete, working driver-assistance software stack (lane keeping, adaptive
 cruise, traffic-light handling, emergency braking, driver override and fault
 handling) that drives a **simulated** 2026 Toyota Corolla sedan. The stack is
