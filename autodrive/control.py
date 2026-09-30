@@ -21,8 +21,12 @@ class LateralController:
         p, L = self.p, self.vp.wheelbase
         # Lane estimate is at the rear axle; move it to the front axle.
         front_lateral = lane.lateral + L * math.sin(lane.heading_error)
-        feedforward = math.atan(L * curvature)
-        heading = -p.heading_gain * lane.heading_error
+        # Kinematic angle for the curve, plus the extra angle an understeering
+        # car needs at this speed (zero on the kinematic plant).
+        feedforward = math.atan(L * curvature) + p.understeer_gradient * speed ** 2 * curvature
+        # With rear tire slip the car holds a curve nose-in; expect that angle.
+        expected_heading = p.rear_slip_gradient * speed ** 2 * curvature
+        heading = -p.heading_gain * (lane.heading_error - expected_heading)
         cross_track = -math.atan2(p.stanley_gain * front_lateral, p.stanley_soft_speed + speed)
         return feedforward + heading + cross_track
 

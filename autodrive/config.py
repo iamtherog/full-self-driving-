@@ -19,6 +19,19 @@ class VehicleParams:
     accel_lag: float = 0.30            # s, first-order powertrain/brake lag
     max_accel: float = 3.0             # m/s^2, physical capability
     max_decel: float = 8.0             # m/s^2, physical capability (~0.8 g)
+    # Plant model. "kinematic" (default) assumes the tires never slip, which is
+    # accurate at the moderate lateral accelerations the planner allows.
+    # "dynamic" adds tire slip and saturation; see vehicle.py.
+    model: str = "kinematic"
+    # Dynamic model only. Representative values for a C-segment sedan, not
+    # measured on a Corolla.
+    mass: float = 1400.0               # kg, with driver
+    yaw_inertia: float = 2200.0        # kg m^2
+    cg_to_front: float = 1.08          # m, lf; lr = 2.70 - 1.08 = 1.62, so 60 % of weight is on the front
+    cornering_stiffness_front: float = 80_000.0   # N/rad, whole axle
+    cornering_stiffness_rear: float = 90_000.0    # N/rad, whole axle
+    friction: float = 0.9              # dry asphalt
+    blend_speeds: tuple[float, float] = (2.0, 4.0)  # m/s, kinematic below the first, dynamic above the second
 
 
 @dataclass(frozen=True)
@@ -51,6 +64,14 @@ class ControllerParams:
     stanley_soft_speed: float = 2.0    # m/s, avoids division blow-up at low speed
     heading_gain: float = 1.0
     curvature_preview: float = 0.3     # s, look ahead to cover steering lag
+    # Steady-state understeer compensation in the feedforward, rad per m/s^2 of
+    # lateral acceleration. 0 for the kinematic plant, which cannot understeer;
+    # use_dynamic_vehicle() sets it to the dynamic plant's value.
+    understeer_gradient: float = 0.0
+    # Steady-state rear-axle sideslip per m/s^2 of lateral acceleration. A car
+    # whose rear tires slip holds a curve with its nose turned in by this angle,
+    # which the heading term must expect rather than fight. 0 on the kinematic plant.
+    rear_slip_gradient: float = 0.0
     # Longitudinal (feedforward + PI on acceleration error)
     accel_kp: float = 0.4
     accel_ki: float = 0.8
@@ -95,3 +116,36 @@ class Config:
     safety: SafetyLimits = field(default_factory=SafetyLimits)
     sensors: SensorParams = field(default_factory=SensorParams)
     control_rate_hz: float = 100.0
+
+
+def understeer_gradient(v: VehicleParams) -> float:
+    """K = m / L * (lr / Cf - lf / Cr), rad per m/s^2 (Rajamani 2012, section 3.3).
+
+    Positive means understeer: holding a curve of curvature k at speed v needs
+    ``L k + K v^2 k`` of road-wheel angle instead of the kinematic ``L k``.
+    """
+
+    lr = v.wheelbase - v.cg_to_front
+    return v.mass / v.wheelbase * (lr / v.cornering_stiffness_front
+                                   - v.cg_to_front / v.cornering_stiffness_rear)
+
+
+def rear_slip_gradient(v: VehicleParams) -> float:
+    """Rear slip angle per m/s^2 in a steady turn: m lf / (L Cr), rad per m/s^2.
+
+    The rear axle carries ``m a_y lf / L`` of lateral force, and a linear tire
+    needs slip angle ``F / Cr`` to produce it.
+    """
+
+    return v.mass * v.cg_to_front / (v.wheelbase * v.cornering_stiffness_rear)
+
+
+def use_dynamic_vehicle(config: Config) -> Config:
+    """The same configuration on the tire-slip plant, with the controller's
+    feedforward matched to that plant's understeer gradient."""
+
+    from dataclasses import replace
+    vehicle = replace(config.vehicle, model="dynamic")
+    controller = replace(config.controller, understeer_gradient=understeer_gradient(vehicle),
+                         rear_slip_gradient=rear_slip_gradient(vehicle))
+    return replace(config, vehicle=vehicle, controller=controller)

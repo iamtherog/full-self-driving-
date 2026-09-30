@@ -10,7 +10,7 @@ import math
 from dataclasses import dataclass
 from enum import Enum
 
-from .config import SafetyLimits, VehicleParams
+from .config import SafetyLimits, VehicleParams, understeer_gradient
 from .perception import PerceptionFrame, time_to_collision
 from .vehicle import DriverInput, VehicleCommand, VehicleState
 
@@ -38,6 +38,8 @@ class SafetySupervisor:
         self.mode = Mode.OFF
         self.fault_reason: str | None = None
         self._last_steer = 0.0
+        # The plant's understeer gradient (rad per m/s^2), 0 for the kinematic model.
+        self._understeer = understeer_gradient(vehicle) if vehicle.model == "dynamic" else 0.0
         self._last_accel = 0.0
 
     def update(self, t: float, frame: PerceptionFrame | None, driver: DriverInput,
@@ -120,10 +122,16 @@ class SafetySupervisor:
 
     def _limit_steer(self, steer: float, speed: float, dt: float) -> float:
         lim, L = self.lim, self.vp.wheelbase
-        # Cap the angle so lateral acceleration v^2 * tan(delta) / L stays in bounds.
+        # Cap the angle so steady-state lateral acceleration stays in bounds. With
+        # no tire slip that is v^2 tan(delta) / L. An understeering car needs an
+        # extra K * a_y of steering for the same a_y (Rajamani 2012, eq. 3.15), so
+        # the cap grows by K * a_max; K is zero on the kinematic plant.
         max_angle = self.vp.max_steer
         if speed > 1.0:
-            max_angle = min(max_angle, math.atan(lim.max_lat_accel_cmd * L / speed ** 2))
+            cap = math.atan(lim.max_lat_accel_cmd * L / speed ** 2)
+            if self._understeer:
+                cap += self._understeer * lim.max_lat_accel_cmd
+            max_angle = min(max_angle, cap)
         steer = _clamp(steer, -max_angle, max_angle)
         step = lim.max_steer_rate_cmd * dt
         return _clamp(steer, self._last_steer - step, self._last_steer + step)

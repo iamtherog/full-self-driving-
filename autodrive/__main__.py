@@ -3,6 +3,7 @@
     python -m autodrive                      # all scenarios
     python -m autodrive city highway --plots out/
     python -m autodrive --attention          # also run the attention monitor (advisory only)
+    python -m autodrive --dynamic            # drive the tire-slip vehicle model instead
 """
 
 import argparse
@@ -10,6 +11,7 @@ import sys
 from pathlib import Path
 
 from . import scenarios
+from .config import Config, use_dynamic_vehicle
 from .sim import run
 
 
@@ -19,6 +21,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("names", nargs="*", metavar="scenario",
                         help=f"any of: {', '.join(scenarios.ALL)} (default: all)")
     parser.add_argument("--plots", metavar="DIR", help="write a PNG report per scenario")
+    parser.add_argument("--dynamic", action="store_true",
+                        help="use the dynamic (tire-slip) vehicle model instead of the kinematic one")
     parser.add_argument("--attention", action="store_true",
                         help="run the attention monitor and list its advisories")
     args = parser.parse_args(argv)
@@ -31,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
         from .attention import AttentionModel
         model = AttentionModel.load()
 
+    config = use_dynamic_vehicle(Config()) if args.dynamic else Config()
     failed = 0
     for name in args.names or list(scenarios.ALL):
         scenario = scenarios.ALL[name]()
@@ -38,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
         if model is not None:
             from .attention import AttentionMonitor
             monitor = AttentionMonitor(model)
-        result = run(scenario, observer=monitor)
+        result = run(scenario, config, observer=monitor)
         print(f"\n{scenario.name} - {scenario.description}")
         print(result.summary())
         if monitor is not None:

@@ -1,5 +1,7 @@
 # autodrive: a driver-assistance stack, tested in simulation
 
+[![CI](https://github.com/iamtherog/full-self-driving-/actions/workflows/ci.yml/badge.svg)](https://github.com/iamtherog/full-self-driving-/actions/workflows/ci.yml)
+
 > **Licensing: free for everyone, with one exception.** The source is public
 > and anyone may use, study, modify and share it, **except** Tesla, SpaceX,
 > and any other company that Elon Musk owns, runs or controls (for example
@@ -12,7 +14,8 @@
 A complete, working driver-assistance software stack (lane keeping, adaptive
 cruise, traffic-light handling, emergency braking, driver override and fault
 handling) that drives a **simulated** 2026 Toyota Corolla sedan. The stack is
-exercised by six closed-loop scenarios and 84 automated tests. An offline
+exercised by six closed-loop scenarios and 100 automated tests, on two vehicle
+models (kinematic, and a dynamic model with tire slip). An offline
 [attention monitor](#attention-monitor), an n-gram model of ordinary driving,
 watches the drive and warns the driver when it stops looking ordinary. It never
 steers or brakes.
@@ -39,7 +42,8 @@ steers or brakes.
 pip install -r requirements.txt
 python -m autodrive                    # run every scenario, print a scorecard
 python -m autodrive city --plots out/  # one scenario, with a PNG report
-python -m pytest                       # 83 tests, ~1 min (one slow test deselected)
+python -m autodrive --dynamic          # the same scenarios on the tire-slip vehicle model
+python -m pytest                       # 99 tests, ~40 s (one slow test deselected)
 python -m pytest -m slow               # retrains the shipped model and checks it bit for bit (~4 min)
 
 python -m autodrive --attention        # scenarios, plus the attention monitor's flags
@@ -51,6 +55,9 @@ python -m autodrive.attention train    # retrain from 1,500 randomized drives (~
 Everything runs offline: no network, no remote model, no API calls, no per-use
 cost. Code quality gates (`pip install -r requirements-dev.txt`):
 `ruff check autodrive tests` and `python -m mypy --strict autodrive` both pass.
+GitHub Actions runs all of it on Python 3.10, 3.11 and 3.12 for every push, and
+the slow bit-for-bit retraining check weekly. For a guided tour of the design
+and the evidence, see the [technical brief](docs/TECHNICAL_BRIEF.md).
 
 ## Architecture
 
@@ -73,7 +80,8 @@ cost. Code quality gates (`pip install -r requirements-dev.txt`):
  safety supervisor ── command envelope, driver override,
    │                  fault detection, AEB (always on)
    ▼
- vehicle ── kinematic bicycle model, steering-rate and
+ vehicle ── kinematic bicycle model (default) or dynamic
+            model with Fiala tires; steering-rate and
             powertrain-lag limits
 
  · · · read-only snapshot after every control step (observe.py) · · ·
@@ -88,7 +96,7 @@ supervisor assumes everything above it can be wrong.
 | Module | What it does |
 | --- | --- |
 | `config.py` | All tunables: vehicle geometry, comfort limits, safety envelope, sensor noise |
-| `vehicle.py` | Plant model: bicycle kinematics, steering rate limit, 0.3 s accel lag |
+| `vehicle.py` | Plant: kinematic or dynamic (tire-slip) bicycle model, steering rate limit, 0.3 s accel lag, gyro and accelerometer outputs |
 | `route.py` | Lane centerline from straight and arc segments; Frenet projection; speed limits; traffic lights |
 | `world.py` | Scripted lead vehicle, including cut-ins and turning off the road |
 | `perception.py` | Noisy sensors, Kalman lead tracker, lane dead reckoning |
@@ -143,10 +151,66 @@ Current results (`python -m autodrive`):
 | driver_override | PASS | 6 cm | none | 3.7 m/s³ | 0 |
 | sensor_failure | PASS | 3 cm | none | 3.7 m/s³ | 0 |
 
+On the dynamic (tire-slip) vehicle model (`python -m autodrive --dynamic`):
+
+| Scenario | Result | Max lane error | Min gap | Max jerk | AEB |
+| --- | --- | --- | --- | --- | --- |
+| highway | PASS | 12 cm | 37 m | 1.9 m/s³ | 0 |
+| city | PASS | 9 cm | 22 m | 3.7 m/s³ | 0 |
+| hard_brake | PASS | 4 cm | 3.0 m | 4.5 m/s³ | 1 |
+| cut_in | PASS | 4 cm | 4.7 m | 4.9 m/s³ | 1 |
+| driver_override | PASS | 10 cm | none | 3.7 m/s³ | 0 |
+| sensor_failure | PASS | 15 cm | none | 3.7 m/s³ | 0 |
+
 Each scenario has a report in [`docs/`](docs/). This one is the emergency
 stop:
 
 ![hard brake report](docs/hard_brake.png)
+
+## Vehicle models
+
+The default plant is a kinematic bicycle model: the wheels roll exactly where
+they point. It is accurate while lateral acceleration stays well below the
+friction limit, which the planner's 2 m/s² comfort cap ensures. The dynamic
+model (`--dynamic`) adds what the kinematic one leaves out.
+
+- **Single-track dynamics** with lateral velocity and yaw rate as states
+  (Rajamani, *Vehicle Dynamics and Control*, 2012, section 2.3).
+- **Fiala brush tires** (Pacejka, *Tire and Vehicle Dynamics*, 2012): linear at
+  small slip, saturating at the friction limit, so the car understeers and can
+  run wide.
+- **A low-speed blend** to the kinematic solution below 2-4 m/s, where slip
+  angles are ratios of tiny velocities and the tire equations are ill-conditioned.
+- **Gyro and accelerometer outputs** (`yaw_rate`, `lateral_accel`), as a real
+  vehicle bus would report them.
+
+Checked against theory in `tests/test_vehicle_dynamics.py`: steady-state
+cornering matches the understeer-gradient equation δ = L/R + K·a_y within 2 %,
+rear slip matches its gradient, lateral acceleration never exceeds μg even at
+full lock, and slow driving agrees with the kinematic model.
+
+Putting the stack on a car that slips exposed three assumptions that only held
+for a car that cannot:
+
+1. **The safety supervisor's steering cap** used the no-slip relation
+   a_y = v² tan δ / L. An understeering car needs more angle for the same a_y,
+   so the cap throttled legitimate cornering and the car ran wide. With every
+   other fix in place, removing this one gives 0.25 m off center on the highway
+   (0.12 m with it) and a lane-departure fault in `driver_override` (5.6 m). The cap now adds K·a_max. The linear gradient slightly
+   overestimates the grip available near 0.3 g, so the envelope errs
+   conservative (2.7 of the 3.0 m/s² allowed), which is the right direction.
+2. **Dead reckoning** through a sensor dropout computed yaw rate from the
+   steering angle with the no-slip formula. It now reads the vehicle's yaw-rate
+   sensor, as a real system would. Lane error through the dropout, with the
+   other fixes in place: 0.92 m before, 0.15 m after.
+3. **The lateral controller's feedforward and heading terms** assumed no slip.
+   The feedforward now includes the understeer term K·v²·κ, and the heading term
+   expects the nose-in attitude that rear-tire slip produces in a steady turn.
+   Both are standard steady-state results.
+
+Each fix has a test that fails without it (mutation-checked). On the kinematic
+plant all of these terms are exactly zero, and the six scenarios are
+bit-identical to the original code.
 
 ## Attention monitor
 
@@ -294,8 +358,9 @@ This is a demonstration of architecture and control design, not a product:
 - Single lane, no lane changes, no pedestrians or cross traffic.
 - Perception is simulated (noisy ground truth), not camera images run
   through a neural network.
-- Kinematic vehicle model: no tire slip, so it is only valid at moderate
-  lateral acceleration.
+- The dynamic vehicle model is a single-track model with lateral tire slip
+  only: no longitudinal slip, no load transfer, no suspension, and
+  representative (not measured) sedan parameters.
 - Nothing here is validated against real vehicle data.
 - The attention monitor has been evaluated only on simulated drives from the
   same generator family it was trained on. Its false-alarm rate on real

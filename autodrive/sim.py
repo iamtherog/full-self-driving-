@@ -130,8 +130,8 @@ def run(scenario: Scenario, config: Config | None = None,
             lane = frame.lane
             plan = planner.plan(frame, ego.speed)
         elif lane is not None:
-            yaw_rate = ego.speed * math.tan(ego.steer) / cfg.vehicle.wheelbase
-            lane = dead_reckon(lane, ego.speed, yaw_rate, route.curvature_at(lane.s), dt)
+            # Odometry: wheel speed and the vehicle's yaw-rate sensor.
+            lane = dead_reckon(lane, ego.speed, ego.yaw_rate, route.curvature_at(lane.s), dt)
 
         # Controllers at the control rate.
         requested = VehicleCommand()
